@@ -4,6 +4,32 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0]
+
+A record book, and an MCP server so the same servers can be read without Discord.
+
+### Added
+
+- **Spinback record book**: `recordPeak` now keeps the all-time best and the last
+  `HISTORY_DAYS` (90) days per server slot, in the same per-guild file (config version 3, older
+  files load as usual). `bestFor`, `historyFor` and `topDays` read it back.
+- **`!board`** / `/board` - best day ever, today, and the busiest days this server has seen.
+- **`!save`** / `/save` - ask a Rust server to save the world over RCON (`server.save`). Admin and
+  up.
+- **`mcp/server.js`** - a zero-config Model Context Protocol server over stdio, so Claude Desktop,
+  Claude Code, Codex or Cursor can ask about the same Rust servers the bot watches:
+  `list_servers`, `server_status`, `players`, `pop_report`, `records`, `server_save`,
+  `broadcast` and - only with `--allow-rcon` - a raw `rcon` tool. Credentials come from the
+  `/setup` data directory or the `RCON_*` variables; nothing else is needed. See `docs/MCP.md`.
+- **`npm run ci`** (`scripts/test-all.js`) - runs the unit tests and then really starts the MCP
+  server on stdio, sends `initialize` / `tools/list` / `tools/call` down the pipe and checks the
+  answers. Handy as a one-shot start command on a host.
+
+### Changed
+
+- `/help` documents the two new commands, and the peek at `HISTORY_DAYS` replaced the earlier
+  today-only statistics.
+
 ## [0.5.1]
 
 `!pop` is the headline command.
