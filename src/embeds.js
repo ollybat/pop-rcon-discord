@@ -1,7 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import { bar, clock, duration, maskPassword, plural, truncate } from './format.js';
 import { BRAND, COLORS, EMOJI, LOG_KINDS, STATUS, TIERS, footerText, tierById } from './theme.js';
-import { MAX_SERVERS, describeConfig } from './store.js';
+import { MAX_SERVERS, describeConfig, peakFor } from './store.js';
 
 export function baseEmbed({ color = COLORS.brand, footer = null } = {}) {
   return new EmbedBuilder().setColor(color).setFooter({ text: footerText(footer) });
@@ -143,7 +143,7 @@ export function playerLines(players, perField = 15, maxFields = 6) {
   return fields;
 }
 
-export function popServerEmbed(snapshot, { showPlayers = true } = {}) {
+export function popServerEmbed(snapshot, { showPlayers = true, peak = null } = {}) {
   const state = snapshot.connected ? (snapshot.info?.restarting ? 'resting' : 'online') : 'offline';
   const status = STATUS[state];
   const info = snapshot.info;
@@ -176,6 +176,8 @@ export function popServerEmbed(snapshot, { showPlayers = true } = {}) {
     { name: EMOJI.queue + ' Queue', value: info.queued + ' queued • ' + info.joining + ' joining', inline: true },
     { name: EMOJI.uptime + ' Uptime', value: duration(info.uptime), inline: true },
   );
+
+  if (peak) embed.addFields({ name: 'Peak today', value: peak, inline: false });
 
   if (showPlayers) embed.addFields(...playerLines(snapshot.players));
   return embed;
@@ -282,4 +284,157 @@ export function errorEmbed(error) {
     .setTitle('💥 That did not work')
     .setDescription(truncate(message, 400))
     .setFooter({ text: 'The full error was written to the error log channel' });
+}
+
+/** "📈 Peak today: 63/100 at 18:42 UTC", or null when nothing is recorded yet. */
+export function peakLine(config, slot, max = null) {
+  const peak = peakFor(config, slot);
+  if (!peak || !peak.peak) return null;
+
+  const at = peak.at ? ' at ' + clock(peak.at) : '';
+  const total = max ? '/' + max : '';
+  return '**' + peak.peak + total + '**' + at;
+}
+
+/** The one-page answer to "why do I need +rcon.web 1?", with the exact start line. */
+export function guideEmbed({ config }) {
+  const server = config?.servers?.[0] ?? null;
+  const port = server?.port ?? 28016;
+
+  const lines = [
+    '**1. Turn on RCON on the Rust server**',
+    'Add this to the start line (server.cfg or your host panel) and restart the server:',
+    '```',
+    '+rcon.web 1 +rcon.ip 0.0.0.0 +rcon.port ' + port + ' +rcon.password "pick-a-long-password"',
+    '```',
+    '+rcon.web 1 is the important one - Rust only opens the websocket console when it is set.',
+    'The port has to be reachable over TCP from wherever this bot runs.',
+    '',
+    '**2. Fill in the server**',
+    '🖥️ Servers → pick a slot → **Add** → name, IP or host, RCON port, RCON password.',
+    'The password has to match +rcon.password exactly. Press **Test** to check it right away.',
+    '',
+    '**3. Pick your staff roles**',
+    '🎭 Roles → pick each role, or press 🪄 **Guess roles** and I will match the roles you',
+    'already have (Owner, Admin, Mod...) by name.',
+    '',
+    '**4. Log channels (optional but nice)**',
+    '📋 Logs → pick a channel per event, or press 📁 **Make channels** and I will build a',
+    'category with all four for you.',
+    '',
+    'Then press ✅ **Done** for a checklist and try **/pop**.',
+  ];
+
+  return baseEmbed({ color: COLORS.brandSoft, footer: 'Rust PC/Steam dedicated servers only - Console Edition has no RCON' })
+    .setTitle('📖 How to get ' + BRAND.name + ' working')
+    .setDescription(truncate(lines.join('\n'), 3900));
+}
+
+function statusRow(snapshot) {
+  const state = snapshot.connected ? (snapshot.info?.restarting ? 'resting' : 'online') : 'offline';
+  const info = snapshot.info;
+
+  const detail = info
+    ? info.players + '/' + info.max + ' online • ' + duration(info.uptime) + ' uptime'
+    : snapshot.error
+      ? truncate(snapshot.error, 90)
+      : 'no answer yet';
+
+  return STATUS[state].emoji + ' **' + (snapshot.name || 'Server ' + snapshot.slot) + '** — ' + detail;
+}
+
+/** Health of every configured server, for /status. */
+export function statusEmbed({ snapshots, config, guild }) {
+  if (!snapshots || snapshots.length === 0) {
+    return baseEmbed({ color: COLORS.warning })
+      .setTitle('⚠️ Nothing to watch yet')
+      .setDescription('Run **/setup** and add a Rust server, then I have something to report.');
+  }
+
+  const online = snapshots.filter((snapshot) => snapshot.connected);
+  const players = snapshots.reduce((sum, snapshot) => sum + (snapshot.info?.players ?? 0), 0);
+  const max = snapshots.reduce((sum, snapshot) => sum + (snapshot.info?.max ?? 0), 0);
+
+  const embed = baseEmbed({ footer: guild ? guild.name : null })
+    .setTitle('📡 ' + BRAND.name + ' status')
+    .setDescription(
+      '**' +
+        online.length +
+        '/' +
+        snapshots.length +
+        '** servers reachable • **' +
+        players +
+        (max ? '/' + max : '') +
+        '** players online\n' +
+        (max ? bar(players, max, 16) : ''),
+    );
+
+  for (const snapshot of snapshots) {
+    const peak = peakLine(config, snapshot.slot, snapshot.info?.max ?? null);
+    embed.addFields({
+      name: 'Server ' + snapshot.slot,
+      value: truncate(statusRow(snapshot) + (peak ? '\n' + peak : ''), 300),
+      inline: false,
+    });
+  }
+
+  embed.setTimestamp(new Date());
+  return embed;
+}
+
+/** Every command, grouped by who can use it. */
+export function helpEmbed({ prefix = '!', prefixEnabled = true, config = null }) {
+  const quote = '`';
+  const rows = [
+    '**Everyone**',
+    quote + '/pop' + quote + (prefixEnabled ? ' or ' + quote + prefix + 'pop' + quote : '') + ' — who is online right now, with buttons',
+    quote + '/status' + quote + ' — is every server reachable, plus the peak of the day',
+    quote + '/help' + quote + ' — this message',
+    '',
+    '**🔨 Moderator and up**',
+    quote + '/players' + quote + ' — the full player list with ping and session time',
+    '',
+    '**🔧 Admin and up**',
+    quote + '/say' + quote + ' — broadcast to in-game chat',
+    quote + '/kick' + quote + ' — kick a player',
+    '',
+    '**⚔️ Head Admin and up**',
+    quote + '/ban' + quote + ' — ban a player',
+    '',
+    '**🛡️ Co-Owner and up**',
+    quote + '/console' + quote + ' — one raw RCON command',
+    '',
+    '**👑 Server owner**',
+    quote + '/setup' + quote + ' — roles, log channels and up to three servers',
+  ];
+
+  return baseEmbed({ footer: describeConfig(config).ready ? 'Staff roles come from /setup' : 'Run /setup to finish setting me up' })
+    .setTitle('🎧 ' + BRAND.name + ' commands')
+    .setDescription(truncate(rows.join('\n'), 3900))
+    .addFields({
+      name: 'Did you know?',
+      value:
+        '• ' + BRAND.name + ' can watch up to three servers at once and adds their populations together.\n' +
+        '• The activity line refreshes every poll with players, queue and uptime.\n' +
+        '• ' + quote + '/pop' + quote + ' has buttons: switch server, refresh, hide the player list.',
+      inline: false,
+    });
+}
+
+/** Posted in a new server when setup has not been done yet. */
+export function welcomeEmbed({ prefix = '!', prefixEnabled = true }) {
+  return baseEmbed({ color: COLORS.brandSoft, footer: 'One command is all I need to start' })
+    .setTitle('🎧 Thanks for adding ' + BRAND.name + '!')
+    .setDescription(
+      'I watch your Rust servers over WebRCON and show the live population in my own status line, ' +
+        'plus who is online, join/leave logs and role-gated staff commands.\n\n' +
+        '**Next step:** the server owner runs **/setup**. It takes about a minute:\n' +
+        '1. 🖥️ add a server (IP, RCON port, RCON password)\n' +
+        '2. 🎭 pick staff roles — or press 🪄 **Guess roles**\n' +
+        '3. 📋 pick log channels — or press 📁 **Make channels**\n\n' +
+        'Then ' +
+        (prefixEnabled ? '`' + prefix + 'pop`' : '`/pop`') +
+        ' shows who is playing, and staff commands follow the roles you saved.',
+    )
+    .setTimestamp(new Date());
 }
