@@ -90,7 +90,8 @@ export function popPayload({ snapshots = [], config = null, showPlayers = true, 
     );
   }
 
-  return { embeds: embeds.slice(0, 10), components: popRows({ snapshots: shown, focus, showPlayers }) };
+  // The buttons always cover every server, so a focused view can still switch back to All.
+  return { embeds: embeds.slice(0, 10), components: popRows({ snapshots, focus, showPlayers }) };
 }
 
 /** Refresh, switch server and show/hide players on an existing /pop (or !pop) answer. */

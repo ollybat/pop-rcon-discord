@@ -18,6 +18,9 @@ const root = join(here, '..');
 const node = process.execPath;
 const args = process.argv.slice(2);
 
+/** Filled in by runUnitTests so the final summary can list every file. */
+let unitResults = [];
+
 function heading(text) {
   console.log('\n=== ' + text + ' ===');
 }
@@ -50,18 +53,17 @@ function runUnitTests() {
 
   console.log('node --test exited with ' + together.status + ', running each file on its own instead');
 
-  let failed = 0;
+  const results = [];
   for (const file of files) {
     console.log('\n--- ' + file + ' ---');
     const result = spawnSync(node, [file], { cwd: root, stdio: 'inherit' });
-    if (result.status !== 0) {
-      failed += 1;
-      console.log('FAILED: ' + file + ' (exit ' + result.status + ')');
-    }
+    results.push({ file, ok: result.status === 0 });
   }
 
-  if (failed) console.log('\n' + failed + ' of ' + files.length + ' test file(s) failed');
-  return failed === 0;
+  unitResults = results;
+  const failed = results.filter((entry) => !entry.ok);
+  console.log('\n' + (files.length - failed.length) + '/' + files.length + ' test file(s) passed');
+  return failed.length === 0;
 }
 
 /** Start the MCP server, talk a little JSON-RPC to it, and check the answers. */
@@ -177,6 +179,7 @@ async function main() {
   const mcpOk = args.includes('--no-mcp') ? true : await smokeTestMcp();
 
   heading('result');
+  for (const entry of unitResults) console.log((entry.ok ? 'PASS  ' : 'FAIL  ') + entry.file);
   console.log('unit tests: ' + (testsOk ? 'PASS' : 'FAIL'));
   console.log('mcp server: ' + (mcpOk ? 'PASS' : 'FAIL'));
   process.exit(testsOk && mcpOk ? 0 : 1);
