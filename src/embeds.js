@@ -1,7 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import { bar, clock, duration, maskPassword, plural, truncate } from './format.js';
 import { BRAND, COLORS, EMOJI, LOG_KINDS, STATUS, TIERS, footerText, tierById } from './theme.js';
-import { HISTORY_DAYS, MAX_SERVERS, bestFor, configuredServers, describeConfig, peakFor, topDays } from './store.js';
+import { MAX_SERVERS, describeConfig, peakFor } from './store.js';
 
 export function baseEmbed({ color = COLORS.brand, footer = null } = {}) {
   return new EmbedBuilder().setColor(color).setFooter({ text: footerText(footer) });
@@ -118,29 +118,41 @@ export function hintEmbed(title, description, color = COLORS.brand) {
   return baseEmbed({ color }).setTitle(title).setDescription(description);
 }
 
-export function playerLines(players, perField = 15, maxFields = 6) {
-  if (!players || players.length === 0) return [{ name: 'Players', value: '_Nobody is online right now._', inline: false }];
+/**
+ * One embed field per chunk of the roster, so a full 200-player server still fits.
+ * The first field says how many are online; the last one says how many were left out.
+ */
+export function playerLines(players = [], perField = 20, maxFields = 4) {
+  const roster = Array.isArray(players) ? players : [];
 
-  const fields = [];
-  for (let i = 0; i < players.length && fields.length < maxFields; i += perField) {
-    const slice = players.slice(i, i + perField);
-    const lines = slice.map((player) => {
-      const ping = player.ping === null ? '' : ' • ' + player.ping + 'ms';
-      const time = player.seconds === null ? '' : ' • ' + duration(player.seconds);
-      return '• **' + player.name + '**' + ping + time;
-    });
-
-    const more = players.length - (i + slice.length);
-    if (more > 0 && fields.length === maxFields - 1) lines.push('_…and ' + plural(more, 'more player') + '_');
-
-    fields.push({
-      name: i === 0 ? 'Players (' + players.length + ')' : 'Players ' + (i + 1) + '–' + (i + slice.length),
-      value: truncate(lines.join('\n'), 1000),
-      inline: false,
-    });
+  if (roster.length === 0) {
+    return [{ name: '👥 Players', value: 'Nobody is online right now.', inline: false }];
   }
 
-  return fields;
+  const chunks = [];
+  for (let index = 0; index < roster.length && chunks.length < maxFields; index += perField) {
+    chunks.push(roster.slice(index, index + perField));
+  }
+
+  const shown = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const remaining = roster.length - shown;
+
+  return chunks.map((chunk, index) => {
+    const value = chunk
+      .map((player) => {
+        const who = player?.name || player?.id || 'unknown';
+        const time = player?.seconds === null || player?.seconds === undefined ? '' : ' — ' + duration(player.seconds);
+        return '• **' + who + '**' + time;
+      })
+      .join('\n');
+
+    const last = index === chunks.length - 1;
+    return {
+      name: index === 0 ? '👥 Players — ' + roster.length + ' online' : '👥 Players (' + (index + 1) + ')',
+      value: last && remaining > 0 ? truncate(value, 950) + '\n*…and ' + plural(remaining, 'more player') + '*' : truncate(value, 1024),
+      inline: false,
+    };
+  });
 }
 
 export function popServerEmbed(snapshot, { showPlayers = true, peak = null } = {}) {
@@ -322,7 +334,7 @@ export function guideEmbed({ config }) {
     '📋 Logs → pick a channel per event, or press 📁 **Make channels** and I will build a',
     'category with all four for you.',
     '',
-    'Then press ✅ **Done** for a checklist and try **/pop**.',
+    'Then press ✅ **Done** for a checklist and try **!pop**.',
   ];
 
   return baseEmbed({ color: COLORS.brandSoft, footer: 'Rust PC/Steam dedicated servers only - Console Edition has no RCON' })
@@ -330,152 +342,6 @@ export function guideEmbed({ config }) {
     .setDescription(truncate(lines.join('\n'), 3900));
 }
 
-function statusRow(snapshot) {
-  const state = snapshot.connected ? (snapshot.info?.restarting ? 'resting' : 'online') : 'offline';
-  const info = snapshot.info;
-
-  const detail = info
-    ? info.players + '/' + info.max + ' online • ' + duration(info.uptime) + ' uptime'
-    : snapshot.error
-      ? truncate(snapshot.error, 90)
-      : 'no answer yet';
-
-  return STATUS[state].emoji + ' **' + (snapshot.name || 'Server ' + snapshot.slot) + '** — ' + detail;
-}
-
-/** Health of every configured server, for /status. */
-export function statusEmbed({ snapshots, config, guild }) {
-  if (!snapshots || snapshots.length === 0) {
-    return baseEmbed({ color: COLORS.warning })
-      .setTitle('⚠️ Nothing to watch yet')
-      .setDescription('Run **/setup** and add a Rust server, then I have something to report.');
-  }
-
-  const online = snapshots.filter((snapshot) => snapshot.connected);
-  const players = snapshots.reduce((sum, snapshot) => sum + (snapshot.info?.players ?? 0), 0);
-  const max = snapshots.reduce((sum, snapshot) => sum + (snapshot.info?.max ?? 0), 0);
-
-  const embed = baseEmbed({ footer: guild ? guild.name : null })
-    .setTitle('📡 ' + BRAND.name + ' status')
-    .setDescription(
-      '**' +
-        online.length +
-        '/' +
-        snapshots.length +
-        '** servers reachable • **' +
-        players +
-        (max ? '/' + max : '') +
-        '** players online\n' +
-        (max ? bar(players, max, 16) : ''),
-    );
-
-  for (const snapshot of snapshots) {
-    const peak = peakLine(config, snapshot.slot, snapshot.info?.max ?? null);
-    embed.addFields({
-      name: 'Server ' + snapshot.slot,
-      value: truncate(statusRow(snapshot) + (peak ? '\n📈 Peak today: ' + peak : ''), 300),
-      inline: false,
-    });
-  }
-
-  embed.setTimestamp(new Date());
-  return embed;
-}
-
-/** Every command, grouped by who can use it. Prefix form first, slash as the alternative. */
-export function helpEmbed({ prefix = '!', prefixEnabled = true, config = null }) {
-  const quote = '`';
-  const form = (name) => quote + (prefixEnabled ? prefix + name : '/' + name) + quote;
-  const both = (name) => (prefixEnabled ? form(name) + ' or ' + quote + '/' + name + quote : form(name));
-
-  const rows = [
-    '**Everyone**',
-    both('pop') + ' — who is online right now, with buttons to switch server, refresh and hide the list',
-    both('status') + ' — is every server reachable, plus the peak of the day',
-    both('board') + ' — the record book: the busiest days this server has seen',
-    both('help') + ' — this message',
-    '',
-    '**🔨 Moderator and up**',
-    both('players') + ' — the full player list with ping and session time',
-    '',
-    '**🔧 Admin and up**',
-    both('say') + ' — broadcast to in-game chat',
-    both('kick') + ' — kick a player',
-    both('save') + ' — ask the server to save the world',
-    '',
-    '**⚔️ Head Admin and up**',
-    both('ban') + ' — ban a player',
-    '',
-    '**🛡️ Co-Owner and up**',
-    both('console') + ' — one raw RCON command',
-    '',
-    '**👑 Server owner**',
-    quote + '/setup' + quote + ' — roles, log channels and up to three servers',
-  ];
-
-  const embed = baseEmbed({
-    footer: describeConfig(config).ready ? 'Staff roles come from /setup' : 'Run /setup to finish setting me up',
-  })
-    .setTitle('🎧 ' + BRAND.name + ' commands')
-    .setDescription(truncate(rows.join('\n'), 3900))
-    .addFields({
-      name: 'Did you know?',
-      value:
-        '• ' + BRAND.name + ' can watch up to three servers at once and adds their populations together.\n' +
-        '• The activity line refreshes every poll with players, queue and uptime.\n' +
-        '• ' + form('pop') + ' has buttons: switch server, refresh, hide the player list.',
-      inline: false,
-    });
-
-  if (prefixEnabled) {
-    embed.addFields({
-      name: 'Prefer slash commands?',
-      value: 'Every command above also exists as \`/pop\`, \`/status\`, \`/players\`, \`/say\`, \`/kick\`, \`/ban\` and \`/console\`.',
-      inline: false,
-    });
-  }
-
-  return embed;
-}
-
-/** The clan record book: best day, today and the busiest days per server. */
-export function boardEmbed({ config, snapshots = [] }) {
-  const servers = configuredServers(config);
-  if (servers.length === 0) {
-    return baseEmbed({ color: COLORS.warning })
-      .setTitle('📈 No records yet')
-      .setDescription('Run **/setup** and add a Rust server - from then on I keep the busiest moment of every day.');
-  }
-
-  const maxBySlot = new Map(snapshots.map((snapshot) => [snapshot.slot, snapshot.info?.max ?? null]));
-
-  const embed = baseEmbed({ footer: 'One peak per UTC day · the last ' + HISTORY_DAYS + ' days' })
-    .setTitle('📈 ' + BRAND.name + ' record book')
-    .setDescription('The busiest moment of the day, measured on every poll.');
-
-  for (const server of servers) {
-    const max = maxBySlot.get(server.slot) ?? null;
-    const total = max ? '/' + max : '';
-    const best = bestFor(config, server.slot);
-    const today = peakFor(config, server.slot);
-    const top = topDays(config, server.slot, 5);
-
-    const lines = [];
-    lines.push(best && best.peak ? '👑 Best day: **' + best.peak + total + '**' + (best.day ? ' on ' + best.day : '') : '👑 Best day: nothing recorded yet');
-    lines.push(today && today.peak ? '📅 Today: **' + today.peak + total + '**' + (today.at ? ' at ' + clock(today.at) : '') : '📅 Today: nobody has been on yet');
-    if (top.length > 1) lines.push('🏆 Busiest: ' + top.map((day) => day.day.slice(5) + ' → **' + day.peak + '**').join(' · '));
-
-    embed.addFields({
-      name: String(server.slot) + '. ' + (server.name || server.host),
-      value: truncate(lines.join('\n'), 1000),
-      inline: false,
-    });
-  }
-
-  return embed;
-}
-
-/** Posted in a new server when setup has not been done yet. */
 export function welcomeEmbed({ prefix = '!', prefixEnabled = true }) {
   return baseEmbed({ color: COLORS.brandSoft, footer: 'One command is all I need to start' })
     .setTitle('🎧 Thanks for adding ' + BRAND.name + '!')

@@ -3,63 +3,48 @@ import { test } from 'node:test';
 import { commandByName, commands, defaultSlot, deniedEmbed, describeOptions, readOptions, slashCommandData } from '../src/commands.js';
 import { emptyGuildConfig } from '../src/store.js';
 
-test('every command has a usable slash definition', () => {
+test('the bot serves exactly two commands: /setup and !pop', () => {
+  assert.deepEqual(
+    commands.map((command) => command.name),
+    ['setup', 'pop'],
+  );
+
   const data = slashCommandData();
-  assert.equal(data.length, commands.length);
-
-  const names = new Set();
-  for (const definition of data) {
-    assert.match(definition.name, /^[a-z-]{1,32}$/);
-    assert.ok(definition.description.length > 0 && definition.description.length <= 100);
-    assert.ok(!names.has(definition.name), 'duplicate command ' + definition.name);
-    names.add(definition.name);
-  }
-
-  assert.deepEqual([...names].sort(), ['ban', 'board', 'console', 'help', 'kick', 'players', 'pop', 'save', 'say', 'setup', 'status']);
-});
-
-test('setup is owner only and slash only, and staff commands need a tier', () => {
-  const setup = commandByName('setup');
-  assert.equal(setup.ownerOnly, true);
-  assert.equal(setup.slashOnly, true);
-  assert.equal(setup.minTier, null);
-
-  for (const name of ['pop', 'status', 'help', 'board']) assert.equal(commandByName(name).minTier, null, name + ' is for everyone');
-  assert.equal(commandByName('players').minTier, 'moderator');
-  assert.equal(commandByName('say').minTier, 'admin');
-  assert.equal(commandByName('kick').minTier, 'admin');
-  assert.equal(commandByName('save').minTier, 'admin', 'saving the world needs an admin');
-  assert.equal(commandByName('ban').minTier, 'headAdmin');
-  assert.equal(commandByName('console').minTier, 'coOwner');
+  assert.equal(data.length, 1, 'only /setup is registered with Discord');
+  assert.equal(data[0].name, 'setup');
+  assert.ok(data[0].description.length > 0 && data[0].description.length <= 100);
 
   for (const command of commands) assert.equal(typeof command.run, 'function');
   assert.equal(commandByName('POP').name, 'pop');
   assert.equal(commandByName('nope'), null);
 });
 
-test('prefix usage is documented for the message commands', () => {
-  for (const name of ['pop', 'status', 'help', 'board', 'players', 'say', 'kick', 'save', 'ban', 'console']) {
-    assert.match(commandByName(name).prefixUsage, /^!/, name + ' needs a !usage line');
+test('the old command set is really gone from the slash menu', () => {
+  const data = slashCommandData().map((definition) => definition.name);
+  assert.deepEqual(data, ['setup']);
+  for (const name of ['pop', 'status', 'board', 'help', 'players', 'say', 'kick', 'save', 'ban', 'console']) {
+    assert.ok(!data.includes(name), name + ' must not be registered any more');
   }
-  assert.equal(commandByName('setup').prefixUsage, undefined, 'setup is slash only');
 });
 
-test('readOptions understands slash interactions', () => {
-  const interaction = {
-    options: {
-      getString: (name) => (name === 'message' ? 'hello' : null),
-      getInteger: (name) => (name === 'server' ? 2 : null),
-      getBoolean: (name) => (name === 'players' ? false : null),
-    },
-  };
+test('/setup is owner only and slash only; !pop is the one prefix command', () => {
+  const setup = commandByName('setup');
+  assert.equal(setup.ownerOnly, true);
+  assert.equal(setup.slashOnly, true);
+  assert.equal(setup.minTier, null);
+  assert.equal(setup.prefixUsage, null, 'setup is slash only');
 
-  const options = readOptions({ command: commandByName('pop'), interaction });
-  assert.equal(options.integer('server'), 2);
-  assert.equal(options.boolean('players'), false);
-  assert.equal(options.string('nope'), null);
+  const pop = commandByName('pop');
+  assert.equal(pop.minTier, null, 'pop is for everybody');
+  assert.equal(pop.prefixOnly, true, 'pop is prefix only');
+  assert.match(pop.prefixUsage, /^!pop/);
+
+  for (const name of ['status', 'board', 'help', 'players', 'say', 'kick', 'save', 'ban', 'console']) {
+    assert.equal(commandByName(name), null, name + ' should not exist any more');
+  }
 });
 
-test('readOptions understands !prefix arguments', () => {
+test('readOptions understands prefix arguments', () => {
   const pop = commandByName('pop');
 
   const empty = readOptions({ command: pop, args: [] });
@@ -75,9 +60,6 @@ test('readOptions understands !prefix arguments', () => {
 
   const off = readOptions({ command: pop, args: ['1', 'off'] });
   assert.equal(off.boolean('players'), false);
-
-  const words = readOptions({ command: commandByName('say'), args: ['server', 'restart', 'now'] });
-  assert.equal(words.string('message'), 'server');
 });
 
 test('describeOptions feeds the command log', () => {
@@ -87,10 +69,10 @@ test('describeOptions feeds the command log', () => {
     { name: 'players', value: 'yes' },
   ]);
 
-  const slash = describeOptions(commandByName('kick'), { options: { data: [{ name: 'player', value: 'griefer' }] } });
-  assert.deepEqual(slash, [{ name: 'player', value: 'griefer' }]);
+  const slash = describeOptions(commandByName('setup'), { options: { data: [{ name: 'option', value: 'x' }] } });
+  assert.deepEqual(slash, [{ name: 'option', value: 'x' }]);
 
-  const long = describeOptions(commandByName('say'), null, ['x'.repeat(200)]);
+  const long = describeOptions(commandByName('pop'), null, ['x'.repeat(200)]);
   assert.equal(long[0].value.length, 80);
 });
 
@@ -101,7 +83,7 @@ test('defaultSlot follows the first configured server', () => {
 });
 
 test('deniedEmbed explains which roles are allowed', () => {
-  const embed = deniedEmbed(commandByName('kick'), { reason: 'no' });
+  const embed = deniedEmbed({ name: 'setup', minTier: 'admin' }, { reason: 'no' });
   assert.match(embed.data.title, /Not allowed/);
   assert.match(embed.data.description, /no/);
   assert.match(embed.data.fields[0].value, /Admin Role/);

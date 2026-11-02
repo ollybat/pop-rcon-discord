@@ -4,12 +4,10 @@ import { COLORS, STATUS } from '../src/theme.js';
 import { emptyGuildConfig, recordPeak } from '../src/store.js';
 import {
   baseEmbed,
-  boardEmbed,
   commandLogEmbed,
   errorEmbed,
   errorLogEmbed,
   guideEmbed,
-  helpEmbed,
   joinLeaveEmbed,
   panelEmbed,
   peakLine,
@@ -20,7 +18,6 @@ import {
   rolesEmbed,
   serverLine,
   serversEmbed,
-  statusEmbed,
   statusLogEmbed,
   welcomeEmbed,
 } from '../src/embeds.js';
@@ -252,50 +249,6 @@ test('popServerEmbed can carry the peak of the day', () => {
   assert.match(fieldNamed(embed, 'Peak today').value, /63\/100/);
 });
 
-test('statusEmbed reports reachability, totals and peaks', () => {
-  const config = buildConfig();
-  recordPeak(config, 1, 63, new Date());
-
-  const embed = statusEmbed({
-    config,
-    guild,
-    snapshots: [
-      {
-        slot: 1,
-        name: 'Spinback 5X EU',
-        connected: true,
-        info: { players: 12, max: 100, queued: 0, joining: 0, uptime: 3600, restarting: false, hostname: 'S' },
-        latencyMs: 8,
-        at: null,
-      },
-      { slot: 2, name: 'Second', connected: false, info: null, latencyMs: null, at: null, error: 'ECONNREFUSED' },
-    ],
-  });
-
-  assert.match(embed.data.title, /status/i);
-  assert.match(embed.data.description, /1\/2/);
-  assert.match(embed.data.description, /12\/100/);
-  assert.match(embed.data.fields[0].value, /Peak today/);
-  assert.match(embed.data.fields[1].value, /ECONNREFUSED/);
-
-  assert.match(statusEmbed({ snapshots: [], config }).data.description, /\/setup/);
-});
-
-test('helpEmbed advertises every command and the prefix form', () => {
-  const embed = helpEmbed({ prefix: '!', prefixEnabled: true, config: buildConfig() });
-
-  for (const name of ['/pop', '/status', '/help', '/players', '/say', '/kick', '/ban', '/console', '/setup']) {
-    assert.ok(embed.data.description.includes(name), name + ' should be documented');
-  }
-  assert.match(embed.data.description, /!pop/);
-  assert.match(embed.data.fields[0].value, /three servers/);
-  assert.match(embed.data.footer.text, /setup/);
-
-  const quiet = helpEmbed({ prefix: '!', prefixEnabled: false, config: emptyGuildConfig('g') });
-  assert.ok(!quiet.data.description.includes('!pop'), 'no prefix form when prefix commands are off');
-  assert.match(quiet.data.footer.text, /Run \/setup/);
-});
-
 test('guideEmbed shows the exact Rust start line', () => {
   const embed = guideEmbed({ config: buildConfig() });
   assert.match(embed.data.description, /\+rcon\.web 1/);
@@ -311,19 +264,3 @@ test('welcomeEmbed tells a new server owner what to do first', () => {
   assert.match(embed.data.description, /!pop/);
 });
 
-test('boardEmbed shows the best day, today and the busiest days', () => {
-  const config = buildConfig();
-  recordPeak(config, 1, 40, new Date('2026-11-01T18:00:00Z'));
-  recordPeak(config, 1, 63, new Date('2026-11-02T18:00:00Z'));
-
-  const embed = boardEmbed({ config, snapshots: [{ slot: 1, connected: true, info: { players: 4, max: 200 } }] });
-
-  assert.match(embed.data.title, /record book/i);
-  assert.match(embed.data.fields[0].name, /1\./);
-  assert.match(embed.data.fields[0].value, /Best day: \*\*63\/200\*\* on 2026-11-02/);
-  assert.match(embed.data.fields[0].value, /Busiest:/);
-  assert.match(embed.data.footer.text, /90 days/);
-
-  const empty = boardEmbed({ config: emptyGuildConfig('g') });
-  assert.match(empty.data.description, /\/setup/);
-});
