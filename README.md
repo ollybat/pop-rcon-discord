@@ -18,6 +18,10 @@ staff a **/setup** wizard, **/pop** player reports and role-gated staff commands
   the list. `/pop` does the same thing if you prefer the slash menu.
 - **!status** - is every server reachable, how many players in total, and today's busiest moment.
 - **!help** - every command grouped by the tier it needs.
+- **!board** - the record book: the best day ever, today, and the busiest days this server has
+  seen (peaks are kept per server, per UTC day, for 90 days).
+- **An MCP server** - `mcp/server.js` lets Claude Desktop / Claude Code / Codex read the same
+  Rust servers directly, no Discord in the middle. See [docs/MCP.md](docs/MCP.md).
 - **Logs** - join & leave (with session length), every staff command, errors, and server
   connects/disconnects.
 - **Staff commands** - /players, /say, /kick, /ban, /console, gated by the roles you picked in
@@ -92,10 +96,14 @@ everything up to Head Admin, and the server owner always can.
 | Slash | Prefix | Who | What it does |
 | --- | --- | --- | --- |
 | `/setup` | - | Server owner / bot owner | Opens the setup panel. |
-| `/pop` | `!pop` | Everyone | Live population, queue, uptime and the player list. `/pop server:2` for one server, `players:false` for counts only. |
+| `/pop` | **`!pop`** | Everyone | Live population, queue, uptime, today's peak and the player list, with buttons to switch server, refresh and hide the list. `!pop 2` opens on one server, `!pop 2 off` hides the names. |
+| `/status` | **`!status`** | Everyone | Are the servers reachable, how many players in total, and each server's peak of the day. |
+| `/board` | **`!board`** | Everyone | The record book: best day ever, today, and the busiest recorded days. |
+| `/help` | **`!help`** | Everyone | Every command, grouped by who can use it. |
 | `/players` | `!players` | 🔨 Moderator and up | Detailed player list with ping and session time. |
 | `/say` | `!say` | 🔧 Admin and up | Broadcasts a message to in-game global chat. |
 | `/kick` | `!kick` | 🔧 Admin and up | Kicks a player by name or SteamID, with an optional reason. |
+| `/save` | `!save` | 🔧 Admin and up | Asks the Rust server to save the world (`server.save`). |
 | `/ban` | `!ban` | ⚔️ Head Admin and up | Bans a player by name or SteamID, with an optional reason. |
 | `/console` | `!console` | 🛡️ Co-Owner and up | Sends one raw RCON command and shows the reply. |
 
@@ -162,7 +170,8 @@ Discord renders an activity name on one line and cuts it at 128 characters, so k
 ```bash
 npm run check     # parse every file as an ES module
 npm run doctor    # configuration, stored /setup data, every RCON server, the Discord token
-npm test          # unit + end-to-end tests against a mock WebRCON server
+npm test        # unit tests
+npm run ci      # unit tests + a real stdio smoke test of the MCP server          # unit + end-to-end tests against a mock WebRCON server
 ```
 
 `npm run doctor` masks every password and exits non-zero when something is wrong.
@@ -180,6 +189,7 @@ src/
   setup/          the wizard: panel.js builds the components, index.js handles them
   commands.js     every command, in slash and !prefix form, plus the access gate
   pop.js          the interactive /pop: embeds plus the switch/refresh/toggle buttons
+mcp/server.js     the MCP server: the same Rust servers, for AI clients instead of Discord
   embeds.js       every embed, in the light blue theme
   logs.js         routes events into the log channels
   permissions.js  role/tier checks
