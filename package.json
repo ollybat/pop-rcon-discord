@@ -1,0 +1,22 @@
+{
+  "name": "pop-rcon-discord",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Discord bot that drives a Rust dedicated server console over WebRCON",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=18.17.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.7",
+    "ws": "^8.18.0"
+  },
+  "license": "MIT"
+}
