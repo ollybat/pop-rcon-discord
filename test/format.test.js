@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bar, chunk, clock, codeBlock, duration, maskPassword, plural, quoteArgument, truncate } from '../src/format.js';
+import { bar, chunk, clock, codeBlock, duration, maskPassword, plural, quoteArgument, scrubSecrets, truncate } from '../src/format.js';
 
 test('duration reads like a human wrote it', () => {
   assert.equal(duration(0), '0s');
@@ -60,4 +60,15 @@ test('maskPassword never leaks the middle of a secret', () => {
   assert.equal(maskPassword('abcd'), '****');
   assert.equal(maskPassword(''), '(not set)');
   assert.equal(maskPassword(null), '(not set)');
+});
+
+test('scrubSecrets hides the password inside an RCON url and any secret it is given', () => {
+  assert.equal(scrubSecrets('connect failed: ws://1.2.3.4:28016/hunter2'), 'connect failed: ws://1.2.3.4:28016/***');
+  assert.equal(scrubSecrets('wss://host/pw'), 'wss://host/***');
+  assert.equal(scrubSecrets('ws://host:28016'), 'ws://host:28016', 'no path, nothing to hide');
+  assert.equal(scrubSecrets('the password is hunter2, ok'), 'the password is hunter2, ok', 'no secret list, no change');
+  assert.equal(scrubSecrets('the password is hunter2, ok', ['hunter2']), 'the password is ***, ok');
+  assert.equal(scrubSecrets('a b c', ['b']), 'a b c', 'too short to be a secret');
+  assert.equal(scrubSecrets(null), '');
+  assert.equal(scrubSecrets(undefined, []), '');
 });

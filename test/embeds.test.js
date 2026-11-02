@@ -276,15 +276,46 @@ test('pingEmbed reports the gateway, the servers and the public URL', () => {
   assert.match(fieldNamed(embed, 'RCON').value, /ECONNREFUSED/);
   assert.match(fieldNamed(embed, 'Public URL').value, /200 OK/);
   assert.match(fieldNamed(embed, 'Public URL').value, /nyksp9z6p1/);
-  assert.match(embed.data.footer.text, /Owner and Co-Owner/);
+  assert.match(embed.data.footer.text, /Private/);
+  assert.doesNotMatch(embed.data.footer.text, /public/i);
 
   const offline = pingEmbed({ snapshots: [], health: { url: 'http://x', ok: false, status: null, ms: 4000, error: 'timed out after 4000ms' } });
   assert.match(fieldNamed(offline, 'RCON').value, /\/setup/);
   assert.match(fieldNamed(offline, 'Public URL').value, /timed out/);
 
+  const withRuntime = pingEmbed({ gatewayMs: 30, snapshots: [], pollSeconds: 20, memoryMb: 84.6 });
+  assert.match(fieldNamed(withRuntime, 'Runtime').value, /polls every 20s/);
+  assert.match(fieldNamed(withRuntime, 'Runtime').value, /85 MB RAM/);
+
   const local = pingEmbed({ snapshots: [], localUrl: 'http://127.0.0.1:25976/health' });
   assert.match(fieldNamed(local, 'Health endpoint').value, /127\.0\.0\.1:25976/);
   assert.equal(offline.data.fields.length, 2);
+});
+
+
+test('the setup panel is private and never renders the RCON password', () => {
+  const config = buildConfig();
+  const panel = panelEmbed({ guild, config });
+  const rendered = JSON.stringify(panel.data);
+
+  assert.match(panel.data.footer.text, /Private/);
+  assert.match(panel.data.description, /Nothing here is public/);
+  assert.ok(!rendered.includes('hunter2'), 'the raw password must never be rendered');
+  assert.match(rendered, /hu\*{3}r2/, 'the password is shown masked');
+
+  const servers = JSON.stringify(serversEmbed(config).data);
+  assert.ok(!servers.includes('hunter2'), 'the server list must not render the password either');
+});
+
+test('errors and the public !pop embed are scrubbed of an RCON url', () => {
+  const leak = 'connect failed: ws://1.2.3.4:28016/hunter2';
+
+  const offline = popServerEmbed({ slot: 1, name: 'S', connected: false, info: null, players: [], latencyMs: null, at: null, error: leak });
+  assert.ok(!JSON.stringify(offline.data).includes('hunter2'), 'the public embed must not echo the url password');
+  assert.match(offline.data.description, /ws:\/\/1\.2\.3\.4:28016\/\*\*\*/);
+
+  assert.ok(!JSON.stringify(errorEmbed(new Error(leak)).data).includes('hunter2'));
+  assert.ok(!JSON.stringify(errorLogEmbed({ source: '/ping', message: leak, context: leak, stack: leak }).data).includes('hunter2'));
 });
 
 test('guideEmbed shows the exact Rust start line', () => {

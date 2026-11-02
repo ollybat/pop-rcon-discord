@@ -50,6 +50,11 @@ test('/setup is owner only and slash only; !pop is open and /ping is for the own
   assert.match(ping.prefixUsage, /^!ping/);
   assert.ok(!ping.slashOnly && !ping.prefixOnly, 'ping works both ways');
 
+  // privacy: the setup panel and the health check are answered in private, !pop is public on purpose
+  assert.equal(setup.private, true, 'the setup panel is private');
+  assert.equal(ping.private, true, 'the health check is private');
+  assert.equal(pop.private, false, 'the population report is for the whole clan');
+
   for (const name of ['status', 'board', 'help', 'players', 'say', 'kick', 'save', 'ban', 'console']) {
     assert.equal(commandByName(name), null, name + ' should not exist any more');
   }
