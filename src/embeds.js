@@ -309,6 +309,59 @@ export function peakLine(config, slot, max = null) {
 }
 
 /** The one-page answer to "why do I need +rcon.web 1?", with the exact start line. */
+/**
+ * The /ping report: the bot's own health first, then the RCON round-trip per server, then
+ * whatever the public URL answered. Everyone who may run it is a clan owner, so no secrets.
+ */
+export function pingEmbed({ gatewayMs = null, uptimeSeconds = null, snapshots = [], health = null, localUrl = null, version = BRAND.version } = {}) {
+  const embed = baseEmbed({ color: COLORS.brandSoft, footer: 'Owner and Co-Owner only' })
+    .setTitle('🏓 Pong')
+    .setDescription(
+      '**Discord gateway** ' +
+        (Number.isFinite(gatewayMs) ? gatewayMs + ' ms' : '—') +
+        '\n**Bot uptime** ' +
+        duration(uptimeSeconds) +
+        '\n**Build** ' +
+        BRAND.name +
+        ' ' +
+        version +
+        ' on node ' +
+        String(process?.version ?? '').replace(/^v/, ''),
+    )
+    .setTimestamp(new Date());
+
+  const roster = Array.isArray(snapshots) ? snapshots : [];
+  const serverLines = roster.length
+    ? roster.map((snapshot) => {
+        const name = snapshot.name || 'Server ' + snapshot.slot;
+        if (!snapshot.connected) {
+          return STATUS.offline.emoji + ' **' + name + '** — offline' + (snapshot.error ? ' (' + truncate(snapshot.error, 60) + ')' : '');
+        }
+        const pingText = snapshot.latencyMs === null || snapshot.latencyMs === undefined ? '—' : snapshot.latencyMs + ' ms';
+        const info = snapshot.info;
+        const players = info ? ' • ' + info.players + '/' + info.max + (info.queued ? ' ⏳' + info.queued : '') : ' • serverinfo did not answer';
+        return STATUS.online.emoji + ' **' + name + '** — ' + pingText + players;
+      })
+    : ['No Rust servers yet — run **/setup** and add one.'];
+
+  embed.addFields({ name: '📶 RCON', value: truncate(serverLines.join('\n'), 1024), inline: false });
+
+  if (health) {
+    const line = health.ok
+      ? '✅ **' + (health.status ?? 200) + ' OK** in ' + (health.ms ?? 0) + ' ms'
+      : '⚠️ ' + truncate(health.error ?? 'no answer', 120) + (health.ms === null ? '' : ' after ' + health.ms + ' ms');
+    embed.addFields({ name: '🌐 Public URL', value: line + '\n' + truncate(health.url ?? '—', 200), inline: false });
+  } else if (localUrl) {
+    embed.addFields({
+      name: '🌐 Health endpoint',
+      value: 'Listening on `' + localUrl + '` — set **PUBLIC_URL** to the address your host proxies and I will call it back here.',
+      inline: false,
+    });
+  }
+
+  return embed;
+}
+
 export function guideEmbed({ config }) {
   const server = config?.servers?.[0] ?? null;
   const port = server?.port ?? 28016;

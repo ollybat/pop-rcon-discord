@@ -11,6 +11,7 @@ import {
   joinLeaveEmbed,
   panelEmbed,
   peakLine,
+  pingEmbed,
   playerLines,
   popServerEmbed,
   popSetupHintEmbed,
@@ -247,6 +248,43 @@ test('popServerEmbed can carry the peak of the day', () => {
   );
 
   assert.match(fieldNamed(embed, 'Peak today').value, /63\/100/);
+});
+
+test('pingEmbed reports the gateway, the servers and the public URL', () => {
+  const embed = pingEmbed({
+    gatewayMs: 42,
+    uptimeSeconds: 3671,
+    snapshots: [
+      {
+        slot: 1,
+        name: 'Spinback 5X EU',
+        connected: true,
+        info: { players: 12, max: 100, queued: 2 },
+        latencyMs: 9,
+      },
+      { slot: 2, name: 'Second', connected: false, info: null, latencyMs: null, error: 'ECONNREFUSED' },
+    ],
+    health: { url: 'https://nyksp9z6p1.apps.bot-hosting.cloud/health', ok: true, status: 200, ms: 31, error: null },
+  });
+
+  assert.match(embed.data.title, /Pong/);
+  assert.match(embed.data.description, /42 ms/);
+  assert.match(embed.data.description, /1h 1m/);
+  assert.match(fieldNamed(embed, 'RCON').value, /Spinback 5X EU/);
+  assert.match(fieldNamed(embed, 'RCON').value, /12\/100/);
+  assert.match(fieldNamed(embed, 'RCON').value, /9 ms/);
+  assert.match(fieldNamed(embed, 'RCON').value, /ECONNREFUSED/);
+  assert.match(fieldNamed(embed, 'Public URL').value, /200 OK/);
+  assert.match(fieldNamed(embed, 'Public URL').value, /nyksp9z6p1/);
+  assert.match(embed.data.footer.text, /Owner and Co-Owner/);
+
+  const offline = pingEmbed({ snapshots: [], health: { url: 'http://x', ok: false, status: null, ms: 4000, error: 'timed out after 4000ms' } });
+  assert.match(fieldNamed(offline, 'RCON').value, /\/setup/);
+  assert.match(fieldNamed(offline, 'Public URL').value, /timed out/);
+
+  const local = pingEmbed({ snapshots: [], localUrl: 'http://127.0.0.1:25976/health' });
+  assert.match(fieldNamed(local, 'Health endpoint').value, /127\.0\.0\.1:25976/);
+  assert.equal(offline.data.fields.length, 2);
 });
 
 test('guideEmbed shows the exact Rust start line', () => {

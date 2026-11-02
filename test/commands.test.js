@@ -3,16 +3,23 @@ import { test } from 'node:test';
 import { commandByName, commands, defaultSlot, deniedEmbed, describeOptions, readOptions, slashCommandData } from '../src/commands.js';
 import { emptyGuildConfig } from '../src/store.js';
 
-test('the bot serves exactly two commands: /setup and !pop', () => {
+test('the bot serves three commands: /setup, !pop and /ping', () => {
   assert.deepEqual(
     commands.map((command) => command.name),
-    ['setup', 'pop'],
+    ['setup', 'pop', 'ping'],
   );
 
   const data = slashCommandData();
-  assert.equal(data.length, 1, 'only /setup is registered with Discord');
-  assert.equal(data[0].name, 'setup');
-  assert.ok(data[0].description.length > 0 && data[0].description.length <= 100);
+  assert.deepEqual(
+    data.map((definition) => definition.name),
+    ['setup', 'ping'],
+    'only /setup and /ping are registered with Discord',
+  );
+
+  for (const definition of data) {
+    assert.match(definition.name, /^[a-z-]{1,32}$/);
+    assert.ok(definition.description.length > 0 && definition.description.length <= 100);
+  }
 
   for (const command of commands) assert.equal(typeof command.run, 'function');
   assert.equal(commandByName('POP').name, 'pop');
@@ -21,13 +28,12 @@ test('the bot serves exactly two commands: /setup and !pop', () => {
 
 test('the old command set is really gone from the slash menu', () => {
   const data = slashCommandData().map((definition) => definition.name);
-  assert.deepEqual(data, ['setup']);
   for (const name of ['pop', 'status', 'board', 'help', 'players', 'say', 'kick', 'save', 'ban', 'console']) {
     assert.ok(!data.includes(name), name + ' must not be registered any more');
   }
 });
 
-test('/setup is owner only and slash only; !pop is the one prefix command', () => {
+test('/setup is owner only and slash only; !pop is open and /ping is for the owners', () => {
   const setup = commandByName('setup');
   assert.equal(setup.ownerOnly, true);
   assert.equal(setup.slashOnly, true);
@@ -38,6 +44,11 @@ test('/setup is owner only and slash only; !pop is the one prefix command', () =
   assert.equal(pop.minTier, null, 'pop is for everybody');
   assert.equal(pop.prefixOnly, true, 'pop is prefix only');
   assert.match(pop.prefixUsage, /^!pop/);
+
+  const ping = commandByName('ping');
+  assert.equal(ping.minTier, 'coOwner', 'only the Owner and Co-Owner roles may ping');
+  assert.match(ping.prefixUsage, /^!ping/);
+  assert.ok(!ping.slashOnly && !ping.prefixOnly, 'ping works both ways');
 
   for (const name of ['status', 'board', 'help', 'players', 'say', 'kick', 'save', 'ban', 'console']) {
     assert.equal(commandByName(name), null, name + ' should not exist any more');
