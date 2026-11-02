@@ -1,8 +1,8 @@
 {
   "name": "pop-rcon-discord",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
-  "description": "Discord bot for Rust dedicated servers: live WebRCON status, one-click /setup wizard, interactive /pop, daily peaks and role-gated staff commands",
+  "description": "Spinback pop bot - live Rust server population in Discord, with /setup, !pop, a record book and an MCP server",
   "type": "module",
   "main": "src/index.js",
   "engines": {
@@ -13,7 +13,9 @@
     "dev": "node --watch src/index.js",
     "check": "node scripts/check.js",
     "doctor": "node scripts/doctor.js",
-    "test": "node --test test/"
+    "test": "node --test test/",
+    "ci": "node scripts/test-all.js",
+    "mcp": "node mcp/server.js"
   },
   "dependencies": {
     "discord.js": "^14.16.3",
