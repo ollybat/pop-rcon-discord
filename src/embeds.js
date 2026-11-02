@@ -382,33 +382,38 @@ export function statusEmbed({ snapshots, config, guild }) {
   return embed;
 }
 
-/** Every command, grouped by who can use it. */
+/** Every command, grouped by who can use it. Prefix form first, slash as the alternative. */
 export function helpEmbed({ prefix = '!', prefixEnabled = true, config = null }) {
   const quote = '`';
+  const form = (name) => quote + (prefixEnabled ? prefix + name : '/' + name) + quote;
+  const both = (name) => (prefixEnabled ? form(name) + ' or ' + quote + '/' + name + quote : form(name));
+
   const rows = [
     '**Everyone**',
-    quote + '/pop' + quote + (prefixEnabled ? ' or ' + quote + prefix + 'pop' + quote : '') + ' — who is online right now, with buttons',
-    quote + '/status' + quote + ' — is every server reachable, plus the peak of the day',
-    quote + '/help' + quote + ' — this message',
+    both('pop') + ' — who is online right now, with buttons to switch server, refresh and hide the list',
+    both('status') + ' — is every server reachable, plus the peak of the day',
+    both('help') + ' — this message',
     '',
     '**🔨 Moderator and up**',
-    quote + '/players' + quote + ' — the full player list with ping and session time',
+    both('players') + ' — the full player list with ping and session time',
     '',
     '**🔧 Admin and up**',
-    quote + '/say' + quote + ' — broadcast to in-game chat',
-    quote + '/kick' + quote + ' — kick a player',
+    both('say') + ' — broadcast to in-game chat',
+    both('kick') + ' — kick a player',
     '',
     '**⚔️ Head Admin and up**',
-    quote + '/ban' + quote + ' — ban a player',
+    both('ban') + ' — ban a player',
     '',
     '**🛡️ Co-Owner and up**',
-    quote + '/console' + quote + ' — one raw RCON command',
+    both('console') + ' — one raw RCON command',
     '',
     '**👑 Server owner**',
     quote + '/setup' + quote + ' — roles, log channels and up to three servers',
   ];
 
-  return baseEmbed({ footer: describeConfig(config).ready ? 'Staff roles come from /setup' : 'Run /setup to finish setting me up' })
+  const embed = baseEmbed({
+    footer: describeConfig(config).ready ? 'Staff roles come from /setup' : 'Run /setup to finish setting me up',
+  })
     .setTitle('🎧 ' + BRAND.name + ' commands')
     .setDescription(truncate(rows.join('\n'), 3900))
     .addFields({
@@ -416,9 +421,19 @@ export function helpEmbed({ prefix = '!', prefixEnabled = true, config = null })
       value:
         '• ' + BRAND.name + ' can watch up to three servers at once and adds their populations together.\n' +
         '• The activity line refreshes every poll with players, queue and uptime.\n' +
-        '• ' + quote + '/pop' + quote + ' has buttons: switch server, refresh, hide the player list.',
+        '• ' + form('pop') + ' has buttons: switch server, refresh, hide the player list.',
       inline: false,
     });
+
+  if (prefixEnabled) {
+    embed.addFields({
+      name: 'Prefer slash commands?',
+      value: 'Every command above also exists as \`/pop\`, \`/status\`, \`/players\`, \`/say\`, \`/kick\`, \`/ban\` and \`/console\`.',
+      inline: false,
+    });
+  }
+
+  return embed;
 }
 
 /** Posted in a new server when setup has not been done yet. */
