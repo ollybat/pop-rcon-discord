@@ -1,8 +1,8 @@
 {
   "name": "pop-rcon-discord",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Discord bot that drives a Rust dedicated server console over WebRCON",
+  "description": "Discord bot that watches a Rust dedicated server console over WebRCON and shows its live status",
   "type": "module",
   "main": "src/index.js",
   "engines": {
