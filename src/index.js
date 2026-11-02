@@ -1,13 +1,14 @@
-import { Client, GatewayIntentBits, MessageFlags, Partials } from 'discord.js';
+import { ChannelType, Client, GatewayIntentBits, MessageFlags, Partials } from 'discord.js';
 import { config, presenceSlot } from './config.js';
 import { createLogger } from './logger.js';
-import { GuildStore, configuredServers } from './store.js';
+import { GuildStore, configuredServers, recordPeak } from './store.js';
 import { LogRouter } from './logs.js';
 import { ChannelRelay } from './relay.js';
 import { PresenceManager, aggregateInfos } from './presence.js';
 import { ServerManager } from './servers.js';
 import { commandByName, defaultSlot, describeOptions, dispatch, readOptions, slashCommandData } from './commands.js';
-import { errorEmbed } from './embeds.js';
+import { errorEmbed, welcomeEmbed } from './embeds.js';
+import { handlePopComponent } from './pop.js';
 import { handleSetupComponent, handleSetupModal } from './setup/index.js';
 import { parsePrefixCommand } from './prefix.js';
 import { BRAND, COLORS } from './theme.js';
@@ -33,6 +34,7 @@ const servers = new ServerManager({
   pollIntervalSeconds: config.poll.intervalSeconds,
   envServer: config.rcon.fromEnv,
   onChat: (guildId, event) => relay.chat(event),
+  onSnapshot: (guildId, snapshot) => recordSnapshot(guildId, snapshot),
   onChanges: (guildId, changes) => reportChanges(guildId, changes),
   onStatus: (guildId, status) => reportStatus(guildId, status),
   onError: (guildId, error) =>
@@ -75,6 +77,23 @@ function reportChanges(guildId, changes) {
 
   for (const player of changes.joined) logs.joinLeave(guildId, { ...base, type: 'join', player });
   for (const player of changes.left) logs.joinLeave(guildId, { ...base, type: 'leave', player, sessionSeconds: player.sessionSeconds });
+}
+
+/** Keep the busiest moment of the day per server, and write to disk only on a new peak. */
+async function recordSnapshot(guildId, snapshot) {
+  try {
+    if (!snapshot || !snapshot.connected || !snapshot.info) return;
+
+    const probe = JSON.parse(JSON.stringify(store.get(guildId)));
+    if (!recordPeak(probe, snapshot.slot, snapshot.info.players)) return;
+
+    await store.update(guildId, (next) => {
+      recordPeak(next, snapshot.slot, snapshot.info.players);
+      return next;
+    });
+  } catch (error) {
+    logger.warn('[peaks] ' + (error && error.message ? error.message : error));
+  }
 }
 
 function reportStatus(guildId, status) {
@@ -191,6 +210,8 @@ async function runCommand(command, options) {
     logger,
     botOwnerIds: config.discord.botOwnerIds,
     slot: defaultSlot(guildConfig, config.rcon.fromEnv),
+    prefix: config.discord.prefix,
+    prefixEnabled: config.discord.prefixCommandsEnabled,
     options: readOptions({ command, interaction: options.interaction ?? null, args: options.args ?? [] }),
     source: invoker.source,
   };
@@ -221,6 +242,10 @@ client.on('interactionCreate', async (interaction) => {
   const ctx = { store, servers, logs, logger, botOwnerIds: config.discord.botOwnerIds, brand: BRAND.name };
 
   try {
+    if ((interaction.customId ?? '').startsWith('sb:pop:')) {
+      if (await handlePopComponent(interaction, ctx)) return;
+    }
+
     if ((interaction.customId ?? '').startsWith('sb:setup:')) {
       if (interaction.isModalSubmit()) {
         if (await handleSetupModal(interaction, ctx)) return;
@@ -299,7 +324,43 @@ client.on('guildCreate', async (guild) => {
   } catch (error) {
     logger.warn('[bot] could not prepare guild ' + guild.id + ': ' + error.message);
   }
+
+  await welcome(guild);
 });
+
+/** Say hello in a new server and wear the brand name. */
+async function welcome(guild) {
+  try {
+    const me = await guild.members.fetchMe();
+    if (me.manageable && me.nickname !== BRAND.name) await me.setNickname(BRAND.name, 'Spinback pop bot');
+  } catch (error) {
+    logger.debug('[bot] could not set the nickname: ' + error.message);
+  }
+
+  if (store.get(guild.id)?.servers?.some(Boolean)) return;
+
+  try {
+    const channel =
+      guild.systemChannel ??
+      guild.channels.cache.find(
+        (candidate) =>
+          candidate.type === ChannelType.GuildText &&
+          candidate.permissionsFor?.(guild.members.me)?.has(['ViewChannel', 'SendMessages']),
+      );
+
+    if (!channel) return;
+    await channel.send({
+      embeds: [
+        welcomeEmbed({
+          prefix: config.discord.prefix,
+          prefixEnabled: config.discord.prefixCommandsEnabled,
+        }),
+      ],
+    });
+  } catch (error) {
+    logger.debug('[bot] could not post the welcome message: ' + error.message);
+  }
+}
 
 async function registerCommands() {
   const body = slashCommandData();
