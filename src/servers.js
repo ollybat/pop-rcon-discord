@@ -242,7 +242,7 @@ export class ServerMonitor {
 
 /** Owns one monitor per configured server, per guild. */
 export class ServerManager {
-  constructor({ store, logger = console, pollIntervalSeconds = 20, envServer = null, onChanges = null, onStatus = null, onError = null, onChat = null }) {
+  constructor({ store, logger = console, pollIntervalSeconds = 20, envServer = null, onChanges = null, onStatus = null, onError = null, onChat = null, onSnapshot = null }) {
     this.store = store;
     this.logger = logger;
     this.pollIntervalMs = Math.max(5, pollIntervalSeconds) * 1000;
@@ -251,6 +251,7 @@ export class ServerManager {
     this.onStatus = onStatus;
     this.onError = onError;
     this.onChat = onChat;
+    this.onSnapshot = onSnapshot;
     this.monitors = new Map();
     this.signatures = new Map();
   }
@@ -293,6 +294,7 @@ export class ServerManager {
         onStatus: (status) => this.onStatus?.(id, status),
         onError: (error) => this.onError?.(id, error),
         onChat: (event) => this.onChat?.(id, event),
+        onSnapshot: (snapshot) => this.onSnapshot?.(id, snapshot),
       });
       wanted.set(server.slot, monitor);
       monitor.start().catch(() => {});
