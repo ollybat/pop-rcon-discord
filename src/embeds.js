@@ -1,10 +1,12 @@
 import { EmbedBuilder } from 'discord.js';
 import { bar, clock, duration, maskPassword, plural, scrubSecrets, truncate } from './format.js';
-import { BRAND, COLORS, EMOJI, LOG_KINDS, STATUS, TIERS, footerText, tierById } from './theme.js';
+import { BRAND, BRAND_LOGO, COLORS, EMOJI, LOG_KINDS, STATUS, TIERS, footerText, tierById } from './theme.js';
 import { MAX_SERVERS, describeConfig, peakFor } from './store.js';
 
-export function baseEmbed({ color = COLORS.brand, footer = null } = {}) {
-  return new EmbedBuilder().setColor(color).setFooter({ text: footerText(footer) });
+export function baseEmbed({ color = COLORS.brand, logo = true } = {}) {
+  const embed = new EmbedBuilder().setColor(color).setFooter({ text: footerText() });
+  if (logo && BRAND_LOGO) embed.setThumbnail(BRAND_LOGO);
+  return embed;
 }
 
 function roleValue(config, tier) {
@@ -38,7 +40,7 @@ export function panelEmbed({ guild, config }) {
   const status = describeConfig(config);
   const servers = config?.servers ?? [];
 
-  const embed = baseEmbed({ footer: '🔒 Private — only the server owner sees this' })
+  const embed = baseEmbed()
     .setTitle('🎧 ' + BRAND.name + ' setup')
     .setDescription(
       'Configure the staff roles, the log channels and up to ' +
@@ -90,20 +92,23 @@ function TIER_LABEL(id) {
 }
 
 export function rolesEmbed({ config }) {
-  return baseEmbed({ footer: 'Pick a role below to change it' })
+  return baseEmbed()
     .setTitle(EMOJI.roles + ' Staff roles')
     .setDescription(
       TIERS.map((tier) => {
         const line = roleValue(config, tier);
         return line + '\n-# ' + tier.description;
-      }).join('\n'),
+      }).join('\n') + '\n\n-# Pick a role below to change it.',
     );
 }
 
 export function logsEmbed({ config }) {
-  return baseEmbed({ footer: 'Pick a channel below to change it' })
+  return baseEmbed()
     .setTitle(EMOJI.logs + ' Log channels')
-    .setDescription(LOG_KINDS.map((kind) => channelValue(config, kind) + '\n-# ' + kind.description).join('\n'));
+    .setDescription(
+      LOG_KINDS.map((kind) => channelValue(config, kind) + '\n-# ' + kind.description).join('\n') +
+        '\n\n-# Pick a channel below to change it.',
+    );
 }
 
 export function serversEmbed({ config, snapshots = [] }) {
@@ -112,9 +117,12 @@ export function serversEmbed({ config, snapshots = [] }) {
     return '**Slot ' + (index + 1) + '**\n' + serverLine(server, snapshot);
   });
 
-  return baseEmbed({ footer: 'Pick a slot below to add or edit it' })
+  return baseEmbed()
     .setTitle(EMOJI.servers + ' Servers')
-    .setDescription(entries.join('\n\n') + '\n-# The RCON password is stored on the bot host and never shown in Discord.');
+    .setDescription(
+      entries.join('\n\n') +
+        '\n\n-# Pick a slot below to add or edit it. The RCON password is stored on the bot host and never shown in Discord.',
+    );
 }
 
 export function hintEmbed(title, description, color = COLORS.brand) {
@@ -167,10 +175,7 @@ export function popServerEmbed(snapshot, { showPlayers = true, peak = null } = {
     ? status.emoji + ' ' + snapshot.name + ' — ' + info.players + '/' + info.max + ' online'
     : status.emoji + ' ' + snapshot.name + ' — ' + status.label;
 
-  const embed = baseEmbed({
-    color: status.color,
-    footer: 'RCON ' + (snapshot.latencyMs === null ? '—' : snapshot.latencyMs + 'ms') + ' • updated ' + clock(snapshot.at),
-  }).setTitle(truncate(title, 250));
+  const embed = baseEmbed({ color: status.color }).setTitle(truncate(title, 250));
 
   if (!snapshot.connected) {
     embed.setDescription(
@@ -186,23 +191,39 @@ export function popServerEmbed(snapshot, { showPlayers = true, peak = null } = {
     return embed;
   }
 
+  const percent = info.max > 0 ? Math.round((info.players / info.max) * 100) : 0;
+  const latency = snapshot.latencyMs === null || snapshot.latencyMs === undefined ? '—' : snapshot.latencyMs + ' ms';
+
   embed.addFields(
-    { name: 'Population', value: bar(info.players, info.max) + ' **' + info.players + '/' + info.max + '**', inline: false },
-    { name: EMOJI.queue + ' Queue', value: info.queued + ' queued • ' + info.joining + ' joining', inline: true },
+    { name: '👥 Population', value: bar(info.players, info.max, 20) + ' **' + info.players + '/' + info.max + '** (' + percent + '%)', inline: false },
+    { name: '⏳ Queue', value: info.queued + ' queued • ' + info.joining + ' joining', inline: true },
     { name: EMOJI.uptime + ' Uptime', value: duration(info.uptime), inline: true },
+    { name: EMOJI.ping + ' RCON', value: latency + '\n-# updated ' + clock(snapshot.at), inline: true },
   );
 
-  if (peak) embed.addFields({ name: 'Peak today', value: peak, inline: false });
+  const details = [];
+  if (info.map) details.push({ name: EMOJI.map + ' Map', value: String(info.map), inline: true });
+  if (info.framerate !== null && info.framerate !== undefined) details.push({ name: EMOJI.framerate + ' FPS', value: String(info.framerate), inline: true });
+  if (info.entityCount !== null && info.entityCount !== undefined) details.push({ name: '🧱 Entities', value: String(info.entityCount), inline: true });
+  if (details.length > 0) embed.addFields(...details);
 
+  if (peak) embed.addFields({ name: '📈 Peak today', value: peak, inline: false });
   if (showPlayers) embed.addFields(...playerLines(snapshot.players));
   return embed;
 }
 
-export function popSummaryEmbed({ totalPlayers, totalMax, onlineServers, totalServers, pollSeconds = null }) {
-  const footer =
-    'Across every server you configured' + (Number.isFinite(pollSeconds) ? ' • refreshed every ' + pollSeconds + 's' : '');
-  return baseEmbed({ footer })
-    .setTitle('📊 ' + BRAND.name + ' population')
+export function popSummaryEmbed({
+  totalPlayers,
+  totalMax,
+  onlineServers,
+  totalServers,
+  pollSeconds = null,
+  servers = [],
+} = {}) {
+  const percent = totalMax > 0 ? Math.round((totalPlayers / totalMax) * 100) : 0;
+
+  const embed = baseEmbed()
+    .setTitle(EMOJI.players + ' ' + BRAND.name + ' network')
     .setDescription(
       '**' +
         totalPlayers +
@@ -212,9 +233,24 @@ export function popSummaryEmbed({ totalPlayers, totalMax, onlineServers, totalSe
         onlineServers +
         ' of ' +
         totalServers +
-        ' servers.\n' +
-        bar(totalPlayers, totalMax, 18),
+        ' servers (' +
+        percent +
+        '%)\n' +
+        bar(totalPlayers, totalMax, 22) +
+        (Number.isFinite(pollSeconds) ? '\n-# refreshed every ' + pollSeconds + 's' : ''),
     );
+
+  const lines = (Array.isArray(servers) ? servers : [])
+    .filter((server) => server && server.slot)
+    .slice(0, 6)
+    .map((server) => {
+      const state = server.connected ? (server.restarting ? 'resting' : 'online') : 'offline';
+      const detail = server.connected && server.max ? server.players + '/' + server.max : STATUS[state].label.toLowerCase();
+      return { name: STATUS[state].emoji + ' ' + truncate(server.name || 'Server ' + server.slot, 200), value: detail, inline: true };
+    });
+
+  if (lines.length > 0) embed.addFields(...lines);
+  return embed;
 }
 
 export function popSetupHintEmbed() {
@@ -227,8 +263,9 @@ export function joinLeaveEmbed({ type, player, server, online, max, sessionSecon
   const joined = type === 'join';
 
   if (massChange) {
-    return baseEmbed({ color: COLORS.warning, footer: server.name })
-      .setTitle('🔄 Big roster change on ' + server.name)
+    return baseEmbed({ color: COLORS.warning })
+      .setAuthor({ name: server.name })
+      .setTitle('🔄 Big roster change')
       .setDescription(
         joinedCount +
           ' joined and ' +
@@ -237,16 +274,17 @@ export function joinLeaveEmbed({ type, player, server, online, max, sessionSecon
       );
   }
 
-  const embed = baseEmbed({
-    color: joined ? COLORS.success : COLORS.warning,
-    footer: server.name + ' • ' + (max === null ? '' : online + '/' + max + ' online'),
-  }).setTitle((joined ? '➕ ' : '➖ ') + player.name);
+  const counts = max === null ? '' : ' — ' + online + '/' + max + ' online';
+  const embed = baseEmbed({ color: joined ? COLORS.success : COLORS.warning })
+    .setAuthor({ name: server.name })
+    .setTitle((joined ? '➕ ' : '➖ ') + player.name)
+    .setDescription((joined ? 'New player on **' + server.name + '**' : 'Left **' + server.name + '**') + counts + '.');
 
   embed.addFields({
-    name: joined ? 'Joined' : 'Left',
+    name: joined ? '👋 Joined' : '👋 Left',
     value: joined
-      ? 'A new player connected to **' + server.name + '**.'
-      : 'Session length: ' + duration(sessionSeconds ?? player.seconds),
+      ? 'Session started ' + clock(new Date()) + ' UTC.'
+      : 'Session length: **' + duration(sessionSeconds ?? player.seconds) + '**',
     inline: false,
   });
 
@@ -258,18 +296,17 @@ export function commandLogEmbed({ user, tier, command, options = [], ok = true, 
   const tierInfo = tier ? tierById(tier) : null;
   const actor = (tierInfo ? tierInfo.emoji + ' ' : '👤 ') + '<@' + user.id + '>';
 
-  const embed = baseEmbed({
-    color: ok ? COLORS.brand : COLORS.danger,
-    footer: guild ? guild.name : null,
-  })
+  const embed = baseEmbed({ color: ok ? COLORS.brand : COLORS.danger })
     .setTitle((ok ? '⌨️ /' : '⛔ /') + command)
     .setDescription(actor + (channel ? ' in <#' + channel.id + '>' : ''));
 
   embed.addFields(
     { name: 'Who', value: '<@' + user.id + '> (' + user.username + ')', inline: true },
-    { name: 'Access', value: tierInfo ? tierInfo.emoji + ' ' + tierInfo.label : 'Server owner', inline: true },
+    { name: 'Access', value: tierInfo ? tierInfo.emoji + ' ' + tierInfo.label : '👑 Server owner', inline: true },
     { name: 'Took', value: ms === null ? '—' : ms + 'ms', inline: true },
   );
+
+  if (guild) embed.addFields({ name: 'Server', value: guild.name, inline: true });
 
   if (options.length > 0) {
     embed.addFields({ name: 'Options', value: truncate(options.map((option) => '**' + option.name + ':** ' + option.value).join('\n'), 500), inline: false });
@@ -282,11 +319,12 @@ export function commandLogEmbed({ user, tier, command, options = [], ok = true, 
 export function errorLogEmbed({ source, message, context = null, stack = null }) {
   const safe = { source: scrubSecrets(source), message: scrubSecrets(message), context: scrubSecrets(context), stack: scrubSecrets(stack) };
   ({ source, message, context, stack } = safe);
-  const embed = baseEmbed({ color: COLORS.danger, footer: source })
-    .setTitle('🚨 Error')
+  const embed = baseEmbed({ color: COLORS.danger })
+    .setTitle('🚨 Error' + (source ? ' — ' + source : ''))
     .setDescription(truncate(message ?? 'Unknown error', 1000))
     .setTimestamp(new Date());
 
+  if (source && source !== 'unknown') embed.addFields({ name: 'Source', value: truncate(String(source), 200), inline: false });
   if (context) embed.addFields({ name: 'Where', value: truncate(context, 500), inline: false });
   if (stack) embed.addFields({ name: 'Trace', value: truncate(stack, 900), inline: false });
   return embed;
@@ -302,8 +340,7 @@ export function errorEmbed(error) {
   const message = scrubSecrets(error && error.message ? error.message : String(error));
   return baseEmbed({ color: COLORS.danger })
     .setTitle('💥 That did not work')
-    .setDescription(truncate(message, 400))
-    .setFooter({ text: 'The full error was written to the error log channel' });
+    .setDescription(truncate(message, 400) + '\n\n-# The full error was written to the error log channel.');
 }
 
 /** "📈 Peak today: 63/100 at 18:42 UTC", or null when nothing is recorded yet. */
@@ -322,7 +359,7 @@ export function peakLine(config, slot, max = null) {
  * whatever the public URL answered. Everyone who may run it is a clan owner, so no secrets.
  */
 export function pingEmbed({ gatewayMs = null, uptimeSeconds = null, snapshots = [], health = null, localUrl = null, version = BRAND.version, pollSeconds = null, memoryMb = null } = {}) {
-  const embed = baseEmbed({ color: COLORS.brandSoft, footer: '🔒 Private — only you and the other clan owners can see this' })
+  const embed = baseEmbed({ color: COLORS.brandSoft })
     .setTitle('🏓 Pong')
     .setDescription(
       '**Discord gateway** ' +
@@ -404,13 +441,16 @@ export function guideEmbed({ config }) {
     'Then press ✅ **Done** for a checklist and try **!pop**.',
   ];
 
-  return baseEmbed({ color: COLORS.brandSoft, footer: 'Rust PC/Steam dedicated servers only - Console Edition has no RCON' })
+  return baseEmbed({ color: COLORS.brandSoft })
     .setTitle('📖 How to get ' + BRAND.name + ' working')
-    .setDescription(truncate(lines.join('\n'), 3900));
+    .setDescription(
+      truncate(lines.join('\n'), 3600) +
+        '\n\n-# Rust PC/Steam dedicated servers only — Console Edition has no RCON.',
+    );
 }
 
 export function welcomeEmbed({ prefix = '!', prefixEnabled = true }) {
-  return baseEmbed({ color: COLORS.brandSoft, footer: 'One command is all I need to start' })
+  return baseEmbed({ color: COLORS.brandSoft })
     .setTitle('🎧 Thanks for adding ' + BRAND.name + '!')
     .setDescription(
       'I watch your Rust servers over WebRCON and show the live population in my own status line, ' +
