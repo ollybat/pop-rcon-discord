@@ -13,10 +13,11 @@ staff a **/setup** wizard, **/pop** player reports and role-gated staff commands
 - **/setup wizard** - buttons and dropdowns, no JSON and no config files to hand edit: five staff
   roles, four log channels and up to three servers. Or press **⚡ Quick setup** and it guesses your
   existing roles by name and creates the four log channels for you.
-- **/pop** - who is online right now, with a population bar, queue, uptime, today's peak and the
-  player list. The buttons under it switch server, refresh on demand and hide the list.
-- **/status** - is every server reachable, how many players in total, and today's busiest moment.
-- **/help** - every command grouped by the tier it needs.
+- **!pop** - who is online right now, with a population bar, queue, uptime, today's peak and the
+  player list, right in the channel. The buttons under it switch server, refresh on demand and hide
+  the list. `/pop` does the same thing if you prefer the slash menu.
+- **!status** - is every server reachable, how many players in total, and today's busiest moment.
+- **!help** - every command grouped by the tier it needs.
 - **Logs** - join & leave (with session length), every staff command, errors, and server
   connects/disconnects.
 - **Staff commands** - /players, /say, /kick, /ban, /console, gated by the roles you picked in

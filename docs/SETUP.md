@@ -67,8 +67,8 @@ Type `/setup` in any channel. Only the **server owner** (or a **bot owner** from
 1. `/setup` → **⚡ Quick setup**. It matches your existing Owner / Admin / Mod roles by name and
    creates a `🎧 Spinback` category with the four log channels.
 2. **🖥️ Servers** → slot 1 → **Add** → IP, RCON port, RCON password → **Test**.
-3. **✅ Done** → checklist. If it is green you are finished: the status line is live and
-   `/pop` works.
+3. **✅ Done** → checklist. If it is green you are finished: the status line is live and `!pop`
+   answers in the channel.
 
 Everything below is the long version, if you would rather pick each thing by hand.
 
