@@ -19,11 +19,12 @@ import { probeHealth } from './web.js';
 export const commands = [
   {
     name: 'setup',
-    description: 'Open the setup panel (server owner only)',
+    description: 'Configure your Rust servers, roles and logs (private)',
     prefixUsage: null,
     minTier: null,
     ownerOnly: true,
     slashOnly: true,
+    private: true,
     data: new SlashCommandBuilder().setName('setup').setDescription('Configure roles, log channels and Rust servers'),
     async run(ctx) {
       const { setupPanelFor } = await import('./setup/index.js');
@@ -38,6 +39,8 @@ export const commands = [
     prefixUsage: '!pop [slot]',
     minTier: null,
     prefixOnly: true,
+    // Public on purpose: the population is for the whole clan to see. No server address, no secret.
+    private: false,
     data: new SlashCommandBuilder()
       .setName('pop')
       .setDescription('Show who is playing right now')
@@ -57,14 +60,15 @@ export const commands = [
         return;
       }
 
-      await ctx.invoker.edit(popPayload({ snapshots, config: ctx.guildConfig, showPlayers, focus: slot }));
+      await ctx.invoker.edit(popPayload({ snapshots, config: ctx.guildConfig, showPlayers, focus: slot, pollSeconds: ctx.pollSeconds }));
     },
   },
   {
     name: 'ping',
-    description: 'Health check: Discord ping, RCON ping and the public URL (Owner and Co-Owner)',
+    description: 'Health check: Discord ping, RCON ping and the public URL (Owner and Co-Owner, private)',
     prefixUsage: '!ping',
     minTier: 'coOwner',
+    private: true,
     data: new SlashCommandBuilder().setName('ping').setDescription('Health check: Discord ping, RCON ping and the public URL'),
     async run(ctx) {
       await ctx.invoker.defer();
@@ -82,6 +86,8 @@ export const commands = [
             snapshots,
             health,
             localUrl,
+            pollSeconds: ctx.pollSeconds ?? null,
+            memoryMb: Math.round(process.memoryUsage().rss / 1048576),
           }),
         ],
       });

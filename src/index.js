@@ -136,7 +136,7 @@ function reportStatus(guildId, status) {
   if (status.type === 'connected') {
     logs.status(guildId, {
       title: '📡 ' + status.server.name + ' is connected',
-      description: 'RCON session established with ' + status.server.host + ':' + status.server.port + '.',
+      description: 'RCON session established and the server is answering. The address stays in /setup.',
       color: COLORS.success,
     });
     return;
@@ -208,20 +208,43 @@ function slashInvoker(interaction) {
   };
 }
 
-function prefixInvoker(message) {
+/**
+ * Prefix replies are public by default. A command marked private (/setup, /ping) is answered in a
+ * DM instead, because posting it in the channel would show the clan's own settings to everyone.
+ */
+function prefixInvoker(message, { private: isPrivate = false } = {}) {
+  const deliver = async (payload) => {
+    if (!isPrivate) return message.reply(payload).catch(() => null);
+
+    const sent = await message.author.send(payload).catch(() => null);
+    if (sent) return sent;
+
+    return message
+      .reply({
+        embeds: [
+          hintEmbed(
+            '🔒 Answered in private',
+            'I could not send you a DM, and this answer is not for the channel.\n' +
+              'Allow direct messages from server members in your privacy settings, or use the slash version instead.',
+          ),
+        ],
+      })
+      .catch(() => null);
+  };
+
   return {
     source: 'prefix',
     async defer() {
       await message.channel.sendTyping().catch(() => {});
     },
     async reply(payload) {
-      return message.reply(payload).catch(() => null);
+      return deliver(payload);
     },
     async edit(payload) {
-      return message.reply(payload).catch(() => null);
+      return deliver(payload);
     },
     async fail(error) {
-      await message.reply({ embeds: [errorEmbed(error)] }).catch(() => {});
+      await deliver({ embeds: [errorEmbed(error)] });
     },
   };
 }
@@ -230,7 +253,9 @@ function prefixInvoker(message) {
 async function runCommand(command, options) {
   const guild = options.guild;
   const guildConfig = options.guildConfig ?? store.get(guild.id);
-  const invoker = options.interaction ? slashInvoker(options.interaction) : prefixInvoker(options.message);
+  const invoker = options.interaction
+    ? slashInvoker(options.interaction)
+    : prefixInvoker(options.message, { private: Boolean(command.private) });
   const started = Date.now();
 
   const ctx = {
@@ -247,6 +272,7 @@ async function runCommand(command, options) {
     botOwnerIds: config.discord.botOwnerIds,
     client,
     web: config.web,
+    pollSeconds: config.poll.intervalSeconds,
     slot: defaultSlot(guildConfig, config.rcon.fromEnv),
     prefix: config.discord.prefix,
     prefixEnabled: config.discord.prefixCommandsEnabled,

@@ -62,7 +62,7 @@ export function popRows({ snapshots = [], focus = null, showPlayers = true }) {
 }
 
 /** Everything a /pop message needs, for any selection. */
-export function popPayload({ snapshots = [], config = null, showPlayers = true, focus = null }) {
+export function popPayload({ snapshots = [], config = null, showPlayers = true, focus = null, pollSeconds = null }) {
   if (snapshots.length === 0) return { embeds: [popSetupHintEmbed()], components: [] };
 
   const visible = focus ? snapshots.filter((snapshot) => snapshot.slot === focus) : snapshots;
@@ -77,6 +77,7 @@ export function popPayload({ snapshots = [], config = null, showPlayers = true, 
         totalMax: online.reduce((sum, snapshot) => sum + snapshot.info.max, 0),
         onlineServers: online.length,
         totalServers: shown.length,
+        pollSeconds,
       }),
     );
   }

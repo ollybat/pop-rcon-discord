@@ -66,3 +66,25 @@ export function maskPassword(value) {
   if (text.length <= 4) return '*'.repeat(text.length);
   return text.slice(0, 2) + '*'.repeat(Math.max(3, text.length - 4)) + text.slice(-2);
 }
+
+/**
+ * Strip anything that must never leave the container before it reaches a log channel, a DM or
+ * an embed. Two shapes matter:
+ *
+ *   1. the Rust RCON URL, which carries the password in its path: ws://host:28016/<password>
+ *   2. any secret we are handed outright (the stored server passwords)
+ */
+export function scrubSecrets(text, secrets = []) {
+  let out = String(text ?? '');
+
+  out = out.replace(/\bwss?:\/\/[^\s"'`)|,]+/gi, (match) =>
+    match.replace(/^(wss?:\/\/[^/]+)(\/[\s\S]*)?$/i, (all, origin, path) => (path ? origin + '/***' : origin)),
+  );
+
+  for (const secret of Array.isArray(secrets) ? secrets : [secrets]) {
+    const value = String(secret ?? '').trim();
+    if (value.length >= 3) out = out.split(value).join('***');
+  }
+
+  return out;
+}

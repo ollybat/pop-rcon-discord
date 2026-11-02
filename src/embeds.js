@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import { bar, clock, duration, maskPassword, plural, truncate } from './format.js';
+import { bar, clock, duration, maskPassword, plural, scrubSecrets, truncate } from './format.js';
 import { BRAND, COLORS, EMOJI, LOG_KINDS, STATUS, TIERS, footerText, tierById } from './theme.js';
 import { MAX_SERVERS, describeConfig, peakFor } from './store.js';
 
@@ -38,12 +38,15 @@ export function panelEmbed({ guild, config }) {
   const status = describeConfig(config);
   const servers = config?.servers ?? [];
 
-  const embed = baseEmbed({ footer: 'Only the server owner can change this' })
+  const embed = baseEmbed({ footer: '🔒 Private — only the server owner sees this' })
     .setTitle('🎧 ' + BRAND.name + ' setup')
     .setDescription(
       'Configure the staff roles, the log channels and up to ' +
         MAX_SERVERS +
-        ' Rust servers.\nUse the buttons below, then hit **Done** when everything is filled in.',
+        ' Rust servers.\nUse the buttons below, then hit **Done** when everything is filled in.\n\n' +
+        '**🔒 Nothing here is public.** This panel, every answer and every test result are visible to ' +
+        'you alone, RCON passwords are shown masked, and no password is ever written to a log channel ' +
+        'or to the bot's status line.',
     );
 
   embed.addFields({
@@ -69,7 +72,7 @@ export function panelEmbed({ guild, config }) {
   embed.addFields({
     name: status.ready ? EMOJI.ok + ' Ready' : '⚠️ Not finished',
     value: status.ready
-      ? 'Roles, logs and at least one server are set. Staff commands now follow these roles.'
+      ? 'Roles, logs and at least one server are set — the status line, `!pop` and `/ping` are live.'
       : 'Still needed: ' +
         [config?.roles?.owner ? null : 'an ' + TIER_LABEL('owner'), status.servers > 0 ? null : 'at least one server']
           .filter(Boolean)
@@ -172,7 +175,7 @@ export function popServerEmbed(snapshot, { showPlayers = true, peak = null } = {
   if (!snapshot.connected) {
     embed.setDescription(
       snapshot.error
-        ? 'The bot cannot reach this server right now.\n' + truncate(snapshot.error, 200)
+        ? 'The bot cannot reach this server right now.\n' + truncate(scrubSecrets(snapshot.error), 200)
         : 'The bot cannot reach this server right now.',
     );
     return embed;
@@ -195,8 +198,10 @@ export function popServerEmbed(snapshot, { showPlayers = true, peak = null } = {
   return embed;
 }
 
-export function popSummaryEmbed({ totalPlayers, totalMax, onlineServers, totalServers }) {
-  return baseEmbed({ footer: 'Across every server you configured' })
+export function popSummaryEmbed({ totalPlayers, totalMax, onlineServers, totalServers, pollSeconds = null }) {
+  const footer =
+    'Across every server you configured' + (Number.isFinite(pollSeconds) ? ' • refreshed every ' + pollSeconds + 's' : '');
+  return baseEmbed({ footer })
     .setTitle('📊 ' + BRAND.name + ' population')
     .setDescription(
       '**' +
@@ -275,6 +280,8 @@ export function commandLogEmbed({ user, tier, command, options = [], ok = true, 
 }
 
 export function errorLogEmbed({ source, message, context = null, stack = null }) {
+  const safe = { source: scrubSecrets(source), message: scrubSecrets(message), context: scrubSecrets(context), stack: scrubSecrets(stack) };
+  ({ source, message, context, stack } = safe);
   const embed = baseEmbed({ color: COLORS.danger, footer: source })
     .setTitle('🚨 Error')
     .setDescription(truncate(message ?? 'Unknown error', 1000))
@@ -313,8 +320,8 @@ export function peakLine(config, slot, max = null) {
  * The /ping report: the bot's own health first, then the RCON round-trip per server, then
  * whatever the public URL answered. Everyone who may run it is a clan owner, so no secrets.
  */
-export function pingEmbed({ gatewayMs = null, uptimeSeconds = null, snapshots = [], health = null, localUrl = null, version = BRAND.version } = {}) {
-  const embed = baseEmbed({ color: COLORS.brandSoft, footer: 'Owner and Co-Owner only' })
+export function pingEmbed({ gatewayMs = null, uptimeSeconds = null, snapshots = [], health = null, localUrl = null, version = BRAND.version, pollSeconds = null, memoryMb = null } = {}) {
+  const embed = baseEmbed({ color: COLORS.brandSoft, footer: '🔒 Private — only you and the other clan owners can see this' })
     .setTitle('🏓 Pong')
     .setDescription(
       '**Discord gateway** ' +
@@ -345,6 +352,12 @@ export function pingEmbed({ gatewayMs = null, uptimeSeconds = null, snapshots = 
     : ['No Rust servers yet — run **/setup** and add one.'];
 
   embed.addFields({ name: '📶 RCON', value: truncate(serverLines.join('\n'), 1024), inline: false });
+
+  const runtime = [];
+  if (Number.isFinite(pollSeconds)) runtime.push('polls every ' + pollSeconds + 's');
+  if (Number.isFinite(memoryMb)) runtime.push(Math.round(memoryMb) + ' MB RAM');
+  runtime.push(String(process?.version ?? '').replace(/^v/, '') + ' / node');
+  if (runtime.length) embed.addFields({ name: '🧩 Runtime', value: runtime.join(' • '), inline: false });
 
   if (health) {
     const line = health.ok

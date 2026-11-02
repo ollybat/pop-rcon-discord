@@ -1,4 +1,5 @@
 import { COLORS } from './theme.js';
+import { scrubSecrets } from './format.js';
 import { commandLogEmbed, errorLogEmbed, joinLeaveEmbed, statusLogEmbed } from './embeds.js';
 
 /**
@@ -13,6 +14,13 @@ export class LogRouter {
     this.queueDelayMs = queueDelayMs;
     this.tail = Promise.resolve();
     this.channels = new Map();
+  }
+
+  /** Every secret this guild has stored, so a log line can never contain one. */
+  secretsFor(guildId) {
+    const servers = this.store.get(guildId)?.servers;
+    if (!Array.isArray(servers)) return [];
+    return servers.filter(Boolean).map((server) => server.password).filter(Boolean);
   }
 
   kindFor(guildId, kind) {
@@ -70,12 +78,24 @@ export class LogRouter {
     return this.enqueue(guildId, 'commands', { embeds: [commandLogEmbed(details)] });
   }
 
-  error(guildId, details) {
-    this.logger.error('[error] ' + (details?.source ? details.source + ': ' : '') + (details?.message ?? ''));
-    return this.enqueue(guildId, 'errors', { embeds: [errorLogEmbed(details)] });
+  error(guildId, details = {}) {
+    const secrets = this.secretsFor(guildId);
+    const safe = {
+      ...details,
+      source: scrubSecrets(details.source, secrets),
+      message: scrubSecrets(details.message, secrets),
+      context: scrubSecrets(details.context, secrets),
+      stack: scrubSecrets(details.stack, secrets),
+    };
+
+    this.logger.error('[error] ' + (safe.source ? safe.source + ': ' : '') + (safe.message ?? ''));
+    return this.enqueue(guildId, 'errors', { embeds: [errorLogEmbed(safe)] });
   }
 
   status(guildId, { title, description, color = COLORS.brand }) {
-    return this.enqueue(guildId, 'status', { embeds: [statusLogEmbed({ title, description, color })] });
+    const secrets = this.secretsFor(guildId);
+    return this.enqueue(guildId, 'status', {
+      embeds: [statusLogEmbed({ title: scrubSecrets(title, secrets), description: scrubSecrets(description, secrets), color })],
+    });
   }
 }
