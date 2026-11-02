@@ -78,6 +78,11 @@ export class LogRouter {
     return this.enqueue(guildId, 'commands', { embeds: [commandLogEmbed(details)] });
   }
 
+  /** Post an arbitrary payload into the staff channel - used for forwarded direct messages. */
+  staff(guildId, payload) {
+    return this.enqueue(guildId, 'commands', payload);
+  }
+
   error(guildId, details = {}) {
     const secrets = this.secretsFor(guildId);
     const safe = {

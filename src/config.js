@@ -90,6 +90,14 @@ export const config = {
       resting: optionalString('PRESENCE_RESTING_FORMAT', DEFAULT_PRESENCE.resting),
     },
   },
+  dm: {
+    // Answer direct messages and pass them to the clan owners.
+    enabled: optionalBoolean('DM_ENABLED', true),
+    // Extra user ids to notify, on top of each Discord server owner and BOT_OWNER_IDS.
+    forwardIds: list('DM_FORWARD_IDS'),
+    forwardStrangers: optionalBoolean('DM_FORWARD_STRANGERS', false),
+    replyCooldownSeconds: Math.max(30, optionalNumber('DM_REPLY_COOLDOWN_SECONDS', 300)),
+  },
   web: {
     // The free hosts give the app a port (SERVER_PORT) and proxy it publicly; a health
     // endpoint there means the URL answers instead of showing "app unreachable".
