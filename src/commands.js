@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { COLORS, TIERS, tierById } from './theme.js';
-import { baseEmbed, playerLines, popServerEmbed, popSetupHintEmbed, popSummaryEmbed } from './embeds.js';
+import { baseEmbed, helpEmbed, playerLines, popSetupHintEmbed, statusEmbed } from './embeds.js';
+import { popPayload, popPlaceholder } from './pop.js';
 import { codeBlock, duration, quoteArgument } from './format.js';
 import { canRun } from './permissions.js';
 import { effectiveServers } from './servers.js';
@@ -41,28 +42,38 @@ export const commands = [
       const showPlayers = ctx.options.boolean('players') ?? true;
 
       await ctx.invoker.defer();
-      const snapshots = await ctx.servers.refreshGuild(ctx.guild.id, slot);
+      const snapshots = await ctx.servers.refreshGuild(ctx.guild.id);
 
       if (snapshots.length === 0) {
-        await ctx.invoker.edit({ embeds: [popSetupHintEmbed()] });
+        await ctx.invoker.edit(popPlaceholder());
         return;
       }
 
-      const embeds = [];
-      if (!slot && snapshots.length > 1) {
-        const online = snapshots.filter((snapshot) => snapshot.connected && snapshot.info);
-        embeds.push(
-          popSummaryEmbed({
-            totalPlayers: online.reduce((sum, snapshot) => sum + snapshot.info.players, 0),
-            totalMax: online.reduce((sum, snapshot) => sum + snapshot.info.max, 0),
-            onlineServers: online.length,
-            totalServers: snapshots.length,
-          }),
-        );
-      }
-
-      for (const snapshot of snapshots) embeds.push(popServerEmbed(snapshot, { showPlayers }));
-      await ctx.invoker.edit({ embeds: embeds.slice(0, 10) });
+      await ctx.invoker.edit(popPayload({ snapshots, config: ctx.guildConfig, showPlayers, focus: slot }));
+    },
+  },
+  {
+    name: 'status',
+    description: 'Are the servers reachable, and how busy was today',
+    prefixUsage: '!status',
+    minTier: null,
+    data: new SlashCommandBuilder().setName('status').setDescription('Are the servers reachable, and how busy was today'),
+    async run(ctx) {
+      await ctx.invoker.defer();
+      const snapshots = await ctx.servers.refreshGuild(ctx.guild.id);
+      await ctx.invoker.edit({ embeds: [statusEmbed({ snapshots, config: ctx.guildConfig, guild: ctx.guild })] });
+    },
+  },
+  {
+    name: 'help',
+    description: 'What I can do and who can use it',
+    prefixUsage: '!help',
+    minTier: null,
+    data: new SlashCommandBuilder().setName('help').setDescription('What I can do and who can use it'),
+    async run(ctx) {
+      await ctx.invoker.reply({
+        embeds: [helpEmbed({ prefix: ctx.prefix, prefixEnabled: ctx.prefixEnabled, config: ctx.guildConfig })],
+      });
     },
   },
   {
