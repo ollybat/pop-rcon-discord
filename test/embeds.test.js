@@ -304,9 +304,17 @@ test('the setup panel is private and never renders the RCON password', () => {
   assert.ok(!rendered.includes('hunter2'), 'the raw password must never be rendered');
   assert.match(panel.data.fields[2].value, /1\.2\.3\.4:28016/, 'the owner still sees the address');
 
-  const servers = JSON.stringify(serversEmbed(config).data);
+  const servers = serversEmbed({ config }).data.description;
   assert.ok(!servers.includes('hunter2'), 'the server list must not render the password either');
-  assert.match(servers, /hu\*{3}r2/, 'the server list shows the password masked');
+  assert.match(servers, /never shown in Discord/);
+
+  // with a live snapshot the list mentions the password, masked, and still not in clear
+  const live = serversEmbed({
+    config,
+    snapshots: [{ slot: 1, connected: true, info: { players: 4, max: 100, restarting: false }, latencyMs: 12 }],
+  }).data.description;
+  assert.ok(!live.includes('hunter2'), 'the masked form must not contain the secret');
+  assert.match(live, /hu\*{3}r2/);
 });
 
 test('errors and the public !pop embed are scrubbed of an RCON url', () => {
