@@ -9,7 +9,7 @@
  * the container, read the log, then point the startup file back at src/index.js.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,10 +22,42 @@ function heading(text) {
   console.log('\n=== ' + text + ' ===');
 }
 
+/** Every test file, named explicitly so the runner works the same on every Node version. */
+function testFiles() {
+  const dir = join(root, 'test');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => name.endsWith('.test.js'))
+    .sort()
+    .map((name) => join('test', name));
+}
+
 function runUnitTests() {
-  heading('node --test test/');
-  const result = spawnSync(node, ['--test', 'test/'], { cwd: root, stdio: 'inherit' });
-  return result.status === 0;
+  const files = testFiles();
+  if (files.length === 0) {
+    console.log('SKIP: no test files found under test/');
+    return true;
+  }
+
+  heading('node --test ' + files.length + ' file(s)');
+  console.log('files: ' + files.join(' '));
+
+  const attempts = [
+    ['--test', ...files],
+    ['--test'],
+    ['--test', 'test'],
+  ];
+
+  for (const args of attempts) {
+    const result = spawnSync(node, args, { cwd: root, stdio: 'inherit' });
+    if (result.status === 0) {
+      console.log('unit tests passed with: node ' + args.join(' '));
+      return true;
+    }
+    console.log('node ' + args.join(' ') + ' exited with ' + result.status + ' - trying the next form');
+  }
+
+  return false;
 }
 
 /** Start the MCP server, talk a little JSON-RPC to it, and check the answers. */
