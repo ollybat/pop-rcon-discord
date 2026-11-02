@@ -2,14 +2,14 @@
 /**
  * Floating CI entry point: unit tests plus a real stdio smoke test of the MCP server.
  *
- *   npm run ci          # everything, exits non-zero on the first failure
- *   node scripts/test-all.js --no-mcp   # unit tests only
+ *   npm run ci            # everything, exits non-zero on the first failure
+ *   node scripts/test-all.js --no-mcp
  *
- * It is also a convenient one-shot start command on a host: point the startup file at it, start
- * the container, read the log, then point the startup file back at src/index.js.
+ * The whole run is printed and also written to ci-report.txt next to this project, so a host with
+ * a short log buffer still leaves the full result behind.
  */
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -17,15 +17,20 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, '..');
 const node = process.execPath;
 const args = process.argv.slice(2);
+const reportPath = join(root, 'ci-report.txt');
+const report = [];
 
-/** Filled in by runUnitTests so the final summary can list every file. */
-let unitResults = [];
-
-function heading(text) {
-  console.log('\n=== ' + text + ' ===');
+/** Print and remember a line. */
+function say(line = '') {
+  console.log(line);
+  report.push(line);
 }
 
-/** Every test file, named explicitly so the runner works the same on every Node version. */
+function heading(text) {
+  say('');
+  say('=== ' + text + ' ===');
+}
+
 function testFiles() {
   const dir = join(root, 'test');
   if (!existsSync(dir)) return [];
@@ -35,45 +40,56 @@ function testFiles() {
     .map((name) => join('test', name));
 }
 
+function run(args) {
+  const result = spawnSync(node, args, { cwd: root, encoding: 'utf8' });
+  return { status: result.status, output: (result.stdout ?? '') + (result.stderr ?? '') };
+}
+
 function runUnitTests() {
   const files = testFiles();
   if (files.length === 0) {
-    console.log('SKIP: no test files found under test/');
-    return true;
+    say('SKIP: no test files found under test/');
+    return { ok: true, results: [] };
   }
 
   heading('unit tests (' + files.length + ' files)');
-  console.log('files: ' + files.join(' '));
+  say('files: ' + files.join(' '));
+  say('node ' + process.version);
 
-  // Preferred: one node --test run. Some hosts wrap node with a script that eats flags, so if
-  // that comes back broken, fall back to running each file in its own process - which is what
-  // node --test does internally anyway.
-  const together = spawnSync(node, ['--test', ...files], { cwd: root, stdio: 'inherit' });
-  if (together.status === 0) return true;
+  // One node --test run first. Some hosts wrap node with a script that swallows flags, so fall
+  // back to one process per file - which is what the runner does internally anyway.
+  const together = run(['--test', ...files]);
+  if (together.status === 0) {
+    say(together.output);
+    say('all ' + files.length + ' test file(s) passed in one run');
+    return { ok: true, results: files.map((file) => ({ file, ok: true })) };
+  }
 
-  console.log('node --test exited with ' + together.status + ', running each file on its own instead');
+  say('node --test exited with ' + together.status + ' - running each file on its own instead');
+  say(together.output);
 
   const results = [];
   for (const file of files) {
-    console.log('\n--- ' + file + ' ---');
-    const result = spawnSync(node, [file], { cwd: root, stdio: 'inherit' });
-    results.push({ file, ok: result.status === 0 });
+    heading(file);
+    const single = run([file]);
+    say(single.output);
+    results.push({ file, ok: single.status === 0 });
   }
 
-  unitResults = results;
   const failed = results.filter((entry) => !entry.ok);
-  console.log('\n' + (files.length - failed.length) + '/' + files.length + ' test file(s) passed');
-  return failed.length === 0;
+  say('');
+  say((files.length - failed.length) + '/' + files.length + ' test file(s) passed');
+  return { ok: failed.length === 0, results };
 }
 
-/** Start the MCP server, talk a little JSON-RPC to it, and check the answers. */
+/** Start the MCP server, speak a little JSON-RPC to it, and check the answers. */
 function smokeTestMcp() {
   heading('mcp/server.js stdio smoke test');
 
   const serverPath = join(root, 'mcp', 'server.js');
   if (!existsSync(serverPath)) {
-    console.log('SKIP: mcp/server.js is missing');
-    return true;
+    say('SKIP: mcp/server.js is missing');
+    return Promise.resolve(true);
   }
 
   return new Promise((resolve) => {
@@ -103,7 +119,7 @@ function smokeTestMcp() {
     for (const request of requests) child.stdin.write(JSON.stringify(request) + '\n');
 
     const timer = setTimeout(() => {
-      console.log('FAIL: the MCP server did not answer within 20s');
+      say('FAIL: the MCP server did not answer within 20s');
       child.kill('SIGKILL');
       resolve(false);
     }, 20000);
@@ -139,50 +155,51 @@ function smokeTestMcp() {
       const tools = responses.get(3)?.result?.tools ?? [];
       if (tools.length < 6) failures.push('tools/list returned ' + tools.length + ' tools');
       for (const tool of tools) {
-        if (!tool.name || !tool.description || !tool.inputSchema) failures.push('tool without name/description/inputSchema: ' + JSON.stringify(tool).slice(0, 60));
+        if (!tool.name || !tool.description || !tool.inputSchema) failures.push('tool without a name, description or schema: ' + JSON.stringify(tool).slice(0, 60));
       }
-      const names = tools.map((tool) => tool.name).join(', ');
-      console.log('tools: ' + names);
+      say('tools: ' + tools.map((tool) => tool.name).join(', '));
 
       const listServers = responses.get(4)?.result?.content?.[0]?.text ?? '';
       if (!listServers) failures.push('list_servers returned nothing');
-      console.log('list_servers -> ' + listServers.split('\n')[0].slice(0, 100));
+      say('list_servers -> ' + (listServers.split('\n')[0] ?? '').slice(0, 120));
 
       const records = responses.get(5)?.result?.content?.[0]?.text ?? '';
       if (!records) failures.push('records returned nothing');
+      say('records -> ' + (records.split('\n')[0] ?? '').slice(0, 120));
 
       const rawRcon = responses.get(6)?.result?.content?.[0]?.text ?? '';
       if (!/off/i.test(rawRcon)) failures.push('the raw rcon tool should be off by default, said: ' + rawRcon.slice(0, 80));
 
-      const unknownTool = responses.get(7);
-      if (!unknownTool?.result?.isError) failures.push('an unknown tool should come back as isError');
+      if (!responses.get(7)?.result?.isError) failures.push('an unknown tool should come back as isError');
+      if (responses.get(8)?.error?.code !== -32601) failures.push('an unknown method should be -32601');
 
-      const unknownMethod = responses.get(8);
-      if (unknownMethod?.error?.code !== -32601) failures.push('an unknown method should be -32601');
+      if (stderr.trim()) say('stderr: ' + stderr.trim().split('\n').slice(0, 4).join(' | '));
 
-      if (stderr.trim()) console.log('stderr: ' + stderr.trim().split('\n').slice(0, 4).join(' | '));
-
-      if (failures.length) {
-        for (const failure of failures) console.log('FAIL: ' + failure);
-        return resolve(false);
-      }
-
-      console.log('PASS: ' + lines.length + ' responses, ' + tools.length + ' tools, protocol and errors behave');
-      resolve(true);
+      for (const failure of failures) say('FAIL: ' + failure);
+      if (failures.length === 0) say('PASS: ' + lines.length + ' responses, ' + tools.length + ' tools, protocol and errors behave');
+      resolve(failures.length === 0);
     });
   });
 }
 
 async function main() {
-  console.log('node ' + process.version + ' on ' + process.platform);
-  const testsOk = runUnitTests();
+  say('spinback ci on node ' + process.version + ' / ' + process.platform);
+  const unit = runUnitTests();
   const mcpOk = args.includes('--no-mcp') ? true : await smokeTestMcp();
 
   heading('result');
-  for (const entry of unitResults) console.log((entry.ok ? 'PASS  ' : 'FAIL  ') + entry.file);
-  console.log('unit tests: ' + (testsOk ? 'PASS' : 'FAIL'));
-  console.log('mcp server: ' + (mcpOk ? 'PASS' : 'FAIL'));
-  process.exit(testsOk && mcpOk ? 0 : 1);
+  for (const entry of unit.results) say((entry.ok ? 'PASS  ' : 'FAIL  ') + entry.file);
+  say('unit tests: ' + (unit.ok ? 'PASS' : 'FAIL'));
+  say('mcp server: ' + (mcpOk ? 'PASS' : 'FAIL'));
+
+  try {
+    writeFileSync(reportPath, report.join('\n') + '\n');
+    console.log('\nfull report written to ' + reportPath);
+  } catch (error) {
+    console.log('could not write the report file: ' + error.message);
+  }
+
+  process.exit(unit.ok && mcpOk ? 0 : 1);
 }
 
 main().catch((error) => {

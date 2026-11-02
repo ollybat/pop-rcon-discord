@@ -1,6 +1,8 @@
 /** Small formatting helpers shared by embeds, logs and commands. */
 
 export function duration(seconds) {
+  // null / undefined mean "the server did not tell us", not zero seconds.
+  if (seconds === null || seconds === undefined || seconds === '') return '—';
   const total = Number(seconds);
   if (!Number.isFinite(total) || total < 0) return '—';
   const days = Math.floor(total / 86400);
@@ -53,6 +55,7 @@ export function quoteArgument(value) {
     .replaceAll('"', ' ')
     .replaceAll('\r', ' ')
     .replaceAll('\n', ' ')
+    .replace(/\s+/g, ' ')
     .trim();
   return '"' + cleaned + '"';
 }
