@@ -3,7 +3,7 @@ import { chmodSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const MAX_SERVERS = 3;
-export const CONFIG_VERSION = 1;
+export const CONFIG_VERSION = 2;
 
 export function emptyGuildConfig(guildId) {
   return {
@@ -12,6 +12,8 @@ export function emptyGuildConfig(guildId) {
     roles: { owner: null, coOwner: null, headAdmin: null, admin: null, moderator: null },
     logs: { joinLeave: null, commands: null, errors: null, status: null },
     servers: [null, null, null],
+    // slot -> { day, peak, peakAt }: the busiest moment of the current UTC day.
+    stats: {},
     updatedAt: null,
   };
 }
@@ -66,8 +68,75 @@ export function normalizeGuildConfig(raw, guildId) {
       : null;
   }
 
+  config.stats = normalizeStats(raw.stats);
   config.updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : null;
   return config;
+}
+
+function normalizeStats(raw) {
+  const stats = {};
+  if (!raw || typeof raw !== 'object') return stats;
+
+  for (const [key, entry] of Object.entries(raw)) {
+    if (!/^[123]$/.test(key)) continue;
+    if (!entry || typeof entry !== 'object') continue;
+
+    const day = String(entry.day ?? '');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+
+    stats[key] = {
+      day,
+      peak: Math.max(0, Number(entry.peak) || 0),
+      peakAt: typeof entry.peakAt === 'string' ? entry.peakAt : null,
+    };
+  }
+
+  return stats;
+}
+
+/** The UTC day a timestamp belongs to, as YYYY-MM-DD. */
+export function dayKey(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Remember the busiest moment of the day for one server slot.
+ * Returns true when something actually changed, so callers only write to disk on a new peak.
+ */
+export function recordPeak(config, slot, players, at = new Date()) {
+  const value = Number(players);
+  if (!config || !Number.isFinite(value) || value < 0) return false;
+
+  if (!config.stats || typeof config.stats !== 'object') config.stats = {};
+
+  const key = String(slot);
+  const day = dayKey(at);
+  if (!day) return false;
+
+  const stamp = at instanceof Date ? at.toISOString() : new Date(at).toISOString();
+  const current = config.stats[key];
+
+  if (!current || current.day !== day) {
+    config.stats[key] = { day, peak: Math.floor(value), peakAt: stamp };
+    return true;
+  }
+
+  if (value > current.peak) {
+    current.peak = Math.floor(value);
+    current.peakAt = stamp;
+    return true;
+  }
+
+  return false;
+}
+
+/** Today's peak for a slot, or null when there is nothing recorded for today. */
+export function peakFor(config, slot, at = new Date()) {
+  const entry = config?.stats?.[String(slot)];
+  if (!entry || entry.day !== dayKey(at)) return null;
+  return { peak: entry.peak, at: entry.peakAt };
 }
 
 export function configuredServers(config) {

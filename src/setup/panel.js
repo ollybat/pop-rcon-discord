@@ -10,9 +10,10 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
-import { hintEmbed, logsEmbed, panelEmbed, rolesEmbed, serversEmbed } from '../embeds.js';
-import { LOG_KINDS, STATUS, TIERS, tierById } from '../theme.js';
-import { MAX_SERVERS } from '../store.js';
+import { guideEmbed, hintEmbed, logsEmbed, panelEmbed, rolesEmbed, serversEmbed } from '../embeds.js';
+import { BRAND, COLORS, LOG_KINDS, STATUS, TIERS, tierById } from '../theme.js';
+import { maskPassword } from '../format.js';
+import { MAX_SERVERS, describeConfig } from '../store.js';
 
 export const SETUP_ID = 'sb:setup';
 
@@ -27,7 +28,9 @@ function button(customId, label, emoji, style) {
 }
 
 export function mainPanel(config, { snapshots = [], guild = null } = {}) {
-  const row = new ActionRowBuilder().addComponents(
+  const status = describeConfig(config);
+
+  const top = new ActionRowBuilder().addComponents(
     button(SETUP_ID + ':view:roles', 'Roles', '🎭', ButtonStyle.Primary),
     button(SETUP_ID + ':view:logs', 'Logs', '📋', ButtonStyle.Primary),
     button(SETUP_ID + ':view:servers', 'Servers', '🖥️', ButtonStyle.Primary),
@@ -35,7 +38,15 @@ export function mainPanel(config, { snapshots = [], guild = null } = {}) {
     button(SETUP_ID + ':done', 'Done', '✅', ButtonStyle.Success),
   );
 
-  return { embeds: [panelEmbed({ guild, config })], components: [row] };
+  const bottom = new ActionRowBuilder().addComponents(
+    button(SETUP_ID + ':quick', status.ready ? 'Finish up' : 'Quick setup', '⚡', ButtonStyle.Success),
+    button(SETUP_ID + ':matchroles', 'Guess roles', '🪄', ButtonStyle.Secondary),
+    button(SETUP_ID + ':createlogs', 'Make channels', '📁', ButtonStyle.Secondary),
+    button(SETUP_ID + ':guide', 'Guide', '📖', ButtonStyle.Secondary),
+    button(SETUP_ID + ':reset', 'Reset', '🧹', ButtonStyle.Danger),
+  );
+
+  return { embeds: [panelEmbed({ guild, config })], components: [top, bottom] };
 }
 
 export function rolesView(config) {
@@ -51,8 +62,12 @@ export function rolesView(config) {
       })),
     );
 
-  const back = new ActionRowBuilder().addComponents(button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary));
-  return { embeds: [rolesEmbed({ config })], components: [new ActionRowBuilder().addComponents(select), back] };
+  const row = new ActionRowBuilder().addComponents(
+    button(SETUP_ID + ':matchroles', 'Guess roles', '🪄', ButtonStyle.Success),
+    button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary),
+  );
+
+  return { embeds: [rolesEmbed({ config })], components: [new ActionRowBuilder().addComponents(select), row] };
 }
 
 export function rolePickView(config, tierId) {
@@ -61,12 +76,20 @@ export function rolePickView(config, tierId) {
 
   const select = new RoleSelectMenuBuilder().setCustomId(SETUP_ID + ':roleset:' + tier.id).setPlaceholder('Pick the ' + tier.label);
   const row = new ActionRowBuilder().addComponents(
-    button(SETUP_ID + ':roleclear:' + tier.id, 'Clear', '🧹', ButtonStyle.Danger),
+    button(SETUP_ID + ':roleclear:' + tier.id, 'Clear', '🧹', ButtonStyle.Danger).setDisabled(tier.required),
     button(SETUP_ID + ':view:roles', 'Back', '⬅️', ButtonStyle.Secondary),
   );
 
   return {
-    embeds: [hintEmbed(tier.emoji + ' ' + tier.label, tier.description + '\n\nCurrently: ' + (config.roles?.[tier.id] ? '<@&' + config.roles[tier.id] + '>' : 'not set'))],
+    embeds: [
+      hintEmbed(
+        tier.emoji + ' ' + tier.label,
+        tier.description +
+          '\n\nCurrently: ' +
+          (config.roles?.[tier.id] ? '<@&' + config.roles[tier.id] + '>' : 'not set') +
+          (tier.required ? '\nThis one is required, so it can be changed but not cleared.' : ''),
+      ),
+    ],
     components: [new ActionRowBuilder().addComponents(select), row],
   };
 }
@@ -85,6 +108,7 @@ export function logsView(config) {
 
   rows.push(
     new ActionRowBuilder().addComponents(
+      button(SETUP_ID + ':createlogs', 'Make channels', '📁', ButtonStyle.Success),
       button(SETUP_ID + ':logclear', 'Clear all', '🧹', ButtonStyle.Danger),
       button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary),
     ),
@@ -104,15 +128,18 @@ export function serversView(config, { snapshots = [] } = {}) {
           label: 'Slot ' + slot,
           value: String(slot),
           emoji: server ? '🎮' : '➕',
-          description: server
-            ? server.name + ' • ' + server.host + ':' + server.port
-            : 'Empty — pick this to add a server',
+          description: server ? server.name + ' • ' + server.host + ':' + server.port : 'Empty — pick this to add a server',
         };
       }),
     );
 
-  const back = new ActionRowBuilder().addComponents(button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary));
-  return { embeds: [serversEmbed({ config, snapshots })], components: [new ActionRowBuilder().addComponents(select), back] };
+  const row = new ActionRowBuilder().addComponents(
+    button(SETUP_ID + ':guide', 'Guide', '📖', ButtonStyle.Success),
+    button(SETUP_ID + ':refresh', 'Test all', '📡', ButtonStyle.Secondary),
+    button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary),
+  );
+
+  return { embeds: [serversEmbed({ config, snapshots })], components: [new ActionRowBuilder().addComponents(select), row] };
 }
 
 export function slotView(config, slot, snapshot = null) {
@@ -127,14 +154,20 @@ export function slotView(config, slot, snapshot = null) {
   const state = snapshot ? (snapshot.connected ? (snapshot.info?.restarting ? 'resting' : 'online') : 'offline') : null;
   const lines = [
     server ? '**' + server.name + '**' : 'Nothing configured in slot ' + slot + ' yet.',
-    server ? 'Address: \`' + server.host + ':' + server.port + '\`' : 'Press **' + (server ? 'Edit' : 'Add') + '** to fill in the name, address, RCON port and password.',
+    server
+      ? 'Address: \`' + server.host + ':' + server.port + '\` • password \`' + maskPassword(server.password) + '\`'
+      : 'Press **Add** to fill in the name, address, RCON port and password.',
     state ? STATUS[state].emoji + ' ' + STATUS[state].label + (snapshot.latencyMs === null ? '' : ' • ' + snapshot.latencyMs + 'ms') : '',
+    server ? 'Press **Test** to check it right now.' : '',
   ].filter(Boolean);
 
-  return {
-    embeds: [hintEmbed('🖥️ Server slot ' + slot, lines.join('\n\n'))],
-    components: [row],
-  };
+  return { embeds: [hintEmbed('🖥️ Server slot ' + slot, lines.join('\n\n'))], components: [row] };
+}
+
+function unusedMask(value) {
+  const text = String(value ?? '');
+  if (text.length <= 4) return '*'.repeat(text.length || 1);
+  return text.slice(0, 2) + '*'.repeat(Math.max(3, text.length - 4)) + text.slice(-2);
 }
 
 export function serverModal(slot, server = null) {
@@ -144,7 +177,7 @@ export function serverModal(slot, server = null) {
     .setStyle(TextInputStyle.Short)
     .setRequired(false)
     .setMaxLength(60)
-    .setPlaceholder('Spinback 5X EU');
+    .setPlaceholder(BRAND.serverDefault);
 
   const host = new TextInputBuilder()
     .setCustomId('host')
@@ -185,5 +218,32 @@ export function serverModal(slot, server = null) {
     );
 }
 
-export const SLOTS = Array.from({ length: MAX_SERVERS }, (_, index) => index + 1);
+export function guideView(config) {
+  const row = new ActionRowBuilder().addComponents(
+    button(SETUP_ID + ':view:servers', 'Servers', '🖥️', ButtonStyle.Primary),
+    button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary),
+  );
 
+  return { embeds: [guideEmbed({ config })], components: [row] };
+}
+
+export function resetView(config) {
+  const row = new ActionRowBuilder().addComponents(
+    button(SETUP_ID + ':resetconfirm', 'Yes, wipe it', '🗑️', ButtonStyle.Danger),
+    button(SETUP_ID + ':main', 'Cancel', '⬅️', ButtonStyle.Secondary),
+  );
+
+  return {
+    embeds: [
+      hintEmbed(
+        '🧹 Reset everything?',
+        'This clears the roles, the log channels, the servers **and** every saved password for this Discord server.\n' +
+          'It cannot be undone. Add the servers again afterwards.',
+        COLORS.danger,
+      ),
+    ],
+    components: [row],
+  };
+}
+
+export const SLOTS = Array.from({ length: MAX_SERVERS }, (_, index) => index + 1);
