@@ -56,6 +56,20 @@ The bot now serves exactly `/setup` and `!pop`. On startup it overwrites the sla
 the guild **and** the global scope, so Discord's own cache is the only thing that can lag: it
 usually clears within an hour, or straight away after a Discord client restart.
 
+## The app URL shows "502 / App unreachable"
+
+That page comes from the host proxy: it reached the container and got nothing on its port. Two
+things to check:
+
+1. `WEB_ENABLED` must not be `false` (the default is `true`), and the port must be the one the
+   host gave you - `WEB_PORT` defaults to `SERVER_PORT`, so leave both alone if unsure.
+2. The console should show `[web] health endpoint listening on 0.0.0.0:<port>` right after the bot
+   logs in. If it shows a warning instead, that port is taken by something else in the container.
+
+Then `https://<your-subdomain>.apps.bot-hosting.cloud/ping` returns the word `pong`, and
+`/health` returns JSON with the bot, the gateway ping and every server's player count. `/ping`
+in Discord calls the same URL when **PUBLIC_URL** is set.
+
 ## `!pop` does nothing
 
 Prefix commands need all three of:

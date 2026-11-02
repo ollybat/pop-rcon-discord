@@ -130,5 +130,9 @@ If not, run `npm run doctor` and read [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ## Changing things later
 
+Once it is green, the clan owners can run `/ping` at any time for a one-glance health check:
+Discord ping, each server's RCON round-trip and players, the build, and what your public app URL
+answers.
+
 Run `/setup` again at any time. Edits are saved as you go, servers are reconnected immediately
 when you change them, and every change is announced in the 📡 Server Status channel.

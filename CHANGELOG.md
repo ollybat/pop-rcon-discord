@@ -4,6 +4,28 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - /ping, and an app URL that answers
+
+### Added
+
+- **`/ping`** (and `!ping`) - the clan owners' health check in one ephemeral reply: Discord
+  gateway latency, the RCON round-trip and player count of every configured server, bot uptime,
+  build, and what the public URL answered. Gated to the 👑 **Owner** and 🛡️ **Co-Owner** roles
+  (the Discord server owner and bot owners always pass, as everywhere else).
+- **A public health endpoint** (`src/web.js`). The bot now listens on the port the host provides
+  and answers `GET /health`, `/status`, `/healthz` and `/` with the same facts as JSON, plus
+  `GET /ping` with the bare word `pong`. That is what turns the free host's
+  *"502 / app unreachable"* page into a real endpoint, and it gives uptime monitors something to
+  poll. `WEB_ENABLED`, `WEB_PORT`, `WEB_HOST` and `PUBLIC_URL` configure it; a port clash is
+  logged and never stops the bot.
+- `probeHealth()` - a fetch with a timeout that reports `{ ok, status, ms, error }` instead of
+  throwing, so `/ping` can report a dead URL as calmly as a live one.
+
+### Changed
+
+- `runCommand`` now puts the Discord client and the web settings on the command context, which is
+  how `/ping` reads the gateway ping and the public URL.
+
 ## [0.6.1] - trimmed to the two commands the clan actually wants
 
 ### Changed

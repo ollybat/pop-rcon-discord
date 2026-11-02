@@ -18,6 +18,12 @@ server owner a **/setup** wizard plus one headline command for everybody: **!pop
   the list.
 - **A record book** - the busiest moment of every day is remembered per server, per UTC day, for
   90 days, and shown in `!pop` as today's peak.
+- **A public health endpoint** - the bot also listens on the port your host gives it, so your
+  app URL answers instead of showing *"app unreachable"*: `GET /health` returns the live state as
+  JSON and `GET /ping` returns `pong`. Handy for uptime monitors and free hosts that like traffic.
+- **/ping** - one command that tells the clan owners everything at once: Discord gateway latency,
+  the RCON round-trip and player count of every server, bot uptime, build, and what your public URL
+  answered. Restricted to the 👑 Owner and 🛡️ Co-Owner roles.
 - **An MCP server** - `mcp/server.js` lets Claude Desktop / Claude Code / Codex read the same
   Rust servers directly, no Discord in the middle. See [docs/MCP.md](docs/MCP.md).
 - **Logs** - join & leave (with session length), every command, errors, and server
@@ -91,6 +97,7 @@ commands to keep in sync any more.
 | Slash | Prefix | Who | What it does |
 | --- | --- | --- | --- |
 | `/setup` | - | Server owner / bot owner | Opens the setup panel. |
+| `/ping` | **`!ping`** | 👑 Owner / 🛡️ Co-Owner | Health check: Discord gateway ping, every server's RCON round-trip and player count, uptime, build, and your public URL's answer. |
 | - | **`!pop`** | Everyone | Live population, queue, uptime, today's peak and the player list, with buttons to switch server, refresh and hide the list. `!pop 2` opens on one server, `!pop 2 off` hides the names. |
 
 That is the whole list. The slash menu only ever holds `/setup` - the bot clears anything else it
@@ -126,6 +133,9 @@ advanced shortcut that pre-fills server slot 1 before the first `/setup`.
 | `RCON_TIMEOUT_MS` | `15000` | How long one RCON command may take. |
 | `RCON_MAX_RECONNECT_DELAY_MS` | `30000` | Ceiling for the reconnect backoff. |
 | `RCON_CHAT_CHANNEL_ID` | - | Optional: mirror in-game chat into this channel. |
+| `WEB_ENABLED` | `true` | Serve `GET /health` (JSON) and `GET /ping` (`pong`) on the port your host gives you. |
+| `WEB_PORT` | `SERVER_PORT` | Port for the health endpoint. `0` lets the OS choose; unset `WEB_ENABLED` to turn it off. |
+| `PUBLIC_URL` | – | The public address of your app, e.g. `https://nyksp9z6p1.apps.bot-hosting.cloud`. `/ping` calls it and reports the status and latency. |
 | `POLL_INTERVAL_SECONDS` | `20` | One poll drives the status line, `!pop` and the join/leave logs. Floor is 5. |
 | `DATA_DIR` | `./data` | Where `/setup` settings are stored (one JSON file per server, mode 0600). |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` or `silent`. |
