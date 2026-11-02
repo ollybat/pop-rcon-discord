@@ -58,4 +58,8 @@ export const config = {
       resting: optionalString('PRESENCE_RESTING_FORMAT', DEFAULT_PRESENCE.resting),
     },
   },
+  log: {
+    level: optionalString('LOG_LEVEL', 'info').toLowerCase(),
+    timestamps: optionalBoolean('LOG_TIMESTAMPS', true),
+  },
 };
