@@ -1,199 +1,175 @@
-# pop-rcon-discord
+# Spinback pop bot
 
-A Discord bot that watches your **Rust dedicated server console**. It connects to the server's
-WebRCON (the websocket RCON you get from `+rcon.web 1`), reports live status in its own
-"Watching ..." activity, and relays in-game chat and connection events into a channel.
+A Discord bot for **Rust dedicated servers** (PC / Steam, not Console Edition) that talks to the
+server console over **WebRCON**, shows the live population in its own status line, and gives your
+staff a **/setup** wizard, **/pop** player reports and role-gated staff commands.
 
-> **Status:** the WebRCON client and the presence logic are unit-tested against mocks (`npm test`),
-> and `npm run check` parses every file. The bot has not been run against a live Rust server yet,
-> so treat the first run as a smoke test - `npm run doctor` makes that quick.
->
-> **No slash commands yet.** The bot currently reports status and relays chat only.
+```
+🟢 RCON┆👥  63/200 ⏳0/2      <- the bot's "Watching" activity, updated every 20 seconds
+```
 
-## What the status looks like
-
-| State | Activity | Discord dot | When |
-| --- | --- | --- | --- |
-| 🟢 Online | `🟢 RCON┆👥  12/100 ⏳0/0` | green | RCON is up and the server answered the last `serverinfo` poll |
-| 🔴 Offline | `🔴 RCON┆OFFLINE` | red | no usable RCON connection, or the server stopped answering |
-| 🟡 Resting | `🟡 RCON┆RESTING` | yellow | the server reports that it is restarting |
-
-The online line is built from the server's own `serverinfo`: `{players}/{max}` and
-`{queued}/{joining}`. All three templates are configurable with environment variables
-(`PRESENCE_ONLINE_FORMAT`, `PRESENCE_OFFLINE_FORMAT`, `PRESENCE_RESTING_FORMAT`), with
-`{players}`, `{max}`, `{maxPlayers}`, `{queued}`, `{joining}` and `{uptime}` as placeholders.
-
-Discord shows an activity name on a single line, so the three states are shown one at a time rather
-than stacked as three lines.
-
-## Features
-
-- Live "Watching" status that tracks the RCON connection and the server's player counts
-- Automatic reconnect with exponential backoff, so a server restart does not kill the bot
-- Optional relay of in-game chat and connect/disconnect events into a channel
-- Leveled logging (`debug` to `silent`) with timestamps
-- `npm run doctor` - one-command diagnosis of the config, RCON and Discord token
-- Small dependency surface: `discord.js`, `ws`, `dotenv` - no build step
+- **Live status line** - 🟢 online with players/max and queue, 🔴 offline, 🟡 resting (the server is
+  restarting). Up to three servers can be added together.
+- **/setup wizard** - buttons and dropdowns, no JSON and no config files to hand edit:
+  five staff roles, four log channels and up to three servers.
+- **/pop** - who is online right now, with a population bar, queue, uptime and the player list.
+- **Logs** - join & leave (with session length), every staff command, errors, and server
+  connects/disconnects.
+- **Staff commands** - /players, /say, /kick, /ban, /console, gated by the roles you picked in
+  /setup.
+- **Light blue everywhere** - every embed uses the Spinback palette and footer.
 
 ## Requirements
 
-- Node.js 18.17 or newer
-- A **Rust (PC / Steam) dedicated server** with WebRCON enabled
-- A Discord application with a bot user
+| | |
+| --- | --- |
+| Rust server | PC/Steam dedicated server started with `+rcon.web 1` (see below). Rust **Console Edition has no RCON** and cannot be used. |
+| Node.js | 18.17 or newer |
+| Discord bot | A bot application with the **Server Members Intent** optional; the **Message Content Intent** is needed for `!prefix` commands |
+| Hosting | Anywhere Node runs: a VPS, Docker, or a free panel such as bot-hosting.net |
 
-Rust Console Edition (Xbox / PlayStation) does not expose an RCON interface, so this bot cannot
-drive it - it only works with a PC dedicated server.
+### Enable RCON on the Rust server
 
-## 1. Enable WebRCON on the Rust server
-
-Add these to your server start command (or your `start_server.bat` / systemd unit / admin panel
-startup parameters):
+Add these to the server's start line (or `server.cfg`-style launch args):
 
 ```
-+rcon.ip 0.0.0.0 +rcon.port 28016 +rcon.password "change-me" +rcon.web 1
++rcon.web 1 +rcon.ip 0.0.0.0 +rcon.port 28016 +rcon.password "a-long-random-password"
 ```
 
-- `rcon.web 1` is what enables the websocket RCON this bot speaks.
-- `rcon.port` defaults to 28016; it must be reachable over **TCP** from wherever the bot runs.
-- Pick a long random password. The password is part of the websocket URL.
-- Do not leave RCON open to the whole internet: allow the port only from your bot's IP (or keep the
-  bot on the same machine / LAN).
+- `+rcon.web 1` is what turns the **websocket** console on. Without it nothing else matters.
+- The RCON port must be reachable over **TCP** from wherever the bot runs.
+- `+rcon.ip 0.0.0.0` listens on every interface; `127.0.0.1` only works for a bot on the same box.
 
-## 2. Create the Discord bot
-
-1. Open <https://discord.com/developers/applications> → **New Application**.
-2. Go to **Bot** → **Reset Token** → copy the token into `DISCORD_TOKEN`.
-3. **OAuth2 → URL Generator**: scopes `bot` and `applications.commands`, permissions
-   `View Channels`, `Send Messages`, `Embed Links`. Open the generated URL to invite the bot.
-
-The bot only needs the `Guilds` gateway intent - no message-content intent.
-
-## 3. Configure and run
+## Quick start
 
 ```bash
 git clone https://github.com/ollybat/pop-rcon-discord.git
 cd pop-rcon-discord
 npm install
-cp .env.example .env    # then fill it in
+cp .env.example .env
+# put DISCORD_TOKEN in .env, then:
 npm start
 ```
 
-### Check your setup
+Invite the bot with the `bot` and `applications.commands` scopes and at least
+**View Channels**, **Send Messages**, **Embed Links** and **Manage Roles** (for the `/setup`
+dropdowns to show your roles).
 
-```bash
-npm run doctor
-```
+Then run **/setup** in your server - see [docs/SETUP.md](docs/SETUP.md) for the walkthrough.
 
-It verifies the configuration, connects to the RCON port, prints `serverinfo` and `playerlist`,
-shows the exact status line the bot would display, checks the Discord token, and exits non-zero if
-anything failed. Passwords are masked. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) when a
-check fails.
+## The /setup wizard
 
-### Environment variables
+`/setup` opens a private panel with a summary and five buttons: **Roles**, **Logs**, **Servers**,
+**Refresh** and **Done**.
 
-| Variable | Required | Default | Description |
-| --- | --- | --- | --- |
-| `DISCORD_TOKEN` | yes | - | Bot token from the Discord developer portal. |
-| `CONSOLE_CHANNEL_ID` | no | - | Channel ID where chat and connection events are relayed. |
-| `RCON_HOST` | yes | - | Rust server IP or hostname. |
-| `RCON_PORT` | no | `28016` | WebRCON port. |
-| `RCON_PASSWORD` | yes | - | The `rcon.password` from your server start command. |
-| `RCON_TIMEOUT_MS` | no | `15000` | How long to wait for a command reply. |
-| `RCON_MAX_RECONNECT_DELAY_MS` | no | `30000` | Reconnect backoff ceiling. |
-| `PRESENCE_ENABLED` | no | `true` | Turn the status updates off entirely. |
-| `PRESENCE_INTERVAL_SECONDS` | no | `15` | Poll interval, minimum 5. |
-| `PRESENCE_RESTING_ON_RECONNECT` | no | `false` | Show 🟡 RESTING while backing off between reconnects. |
-| `PRESENCE_ONLINE_FORMAT` | no | `🟢 RCON┆👥  {players}/{max} ⏳{queued}/{joining}` | Online template. |
-| `PRESENCE_OFFLINE_FORMAT` | no | `🔴 RCON┆OFFLINE` | Offline template. |
-| `PRESENCE_RESTING_FORMAT` | no | `🟡 RCON┆RESTING` | Resting template. |
-| `LOG_LEVEL` | no | `info` | `debug`, `info`, `warn`, `error` or `silent`. |
-| `LOG_TIMESTAMPS` | no | `true` | Prefix log lines with an ISO timestamp. |
-
-## Deploying on bot-hosting.net
-
-The bot runs as a plain Node process, so it fits a standard panel deployment:
-
-1. Create a deployment of type **Node.js** and pick the source - clone this GitHub repository
-   (give it a personal access token if you keep the repo private), or upload the project as a ZIP.
-2. Needed files at the root: `package.json`, `src/`, `scripts/` and your `.env`. **Do not upload
-   `node_modules`** - the host installs the packages listed in `package.json` itself.
-3. Open **Startup** and set **Entry File (STARTUP_FILE)** to `src/index.js`.
-4. Upload your `.env` through the **Files** tab next to `package.json` (it is git-ignored, so it is
-   not in the repository). One variable per line, no quotes.
-5. Start the deployment and watch the console: you should see the Discord login, then
-   `[presence] ... -> online` once RCON answers. If it logs a timeout instead, run the checks in
-   [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
-
-Anything that keeps a Node 18+ process alive works too - a VPS with the bundled systemd unit
-(`deploy/pop-rcon-discord.service`), Docker Compose, or a Raspberry Pi on the same network as the
-server.
-
-## Run it with Docker
-
-```bash
-docker build -t pop-rcon-discord .
-docker run --rm --env-file .env pop-rcon-discord
-
-# or
-docker compose up -d --build
-```
-
-## Scripts
-
-| Script | What it does |
+| Step | What you configure |
 | --- | --- |
-| `npm start` | Run the bot. |
-| `npm run dev` | Run with `node --watch`. |
-| `npm run check` | Parse every file with `node --check` in ES module mode. |
-| `npm run doctor` | Diagnose the configuration, RCON and Discord token. |
-| `npm test` | Run the test suite. |
+| 🎭 Roles | 👑 Owner (required), 🛡️ Co-Owner, ⚔️ Head Admin, 🔧 Admin, 🔨 Moderator |
+| 📋 Logs | 🚪 Join & Leave, ⌨️ Command Log, 🚨 Error Log, 📡 Server Status |
+| 🖥️ Servers | Up to three servers: name, IP/host, RCON port, RCON password |
 
-## Tests
+Only the **Discord server owner** (or a **bot owner** listed in `BOT_OWNER_IDS`) can use `/setup`.
+Every other command follows the roles you saved: a member with the ⚔️ Head Admin role can use
+everything up to Head Admin, and the server owner always can.
+
+## Commands
+
+| Slash | Prefix | Who | What it does |
+| --- | --- | --- | --- |
+| `/setup` | - | Server owner / bot owner | Opens the setup panel. |
+| `/pop` | `!pop` | Everyone | Live population, queue, uptime and the player list. `/pop server:2` for one server, `players:false` for counts only. |
+| `/players` | `!players` | 🔨 Moderator and up | Detailed player list with ping and session time. |
+| `/say` | `!say` | 🔧 Admin and up | Broadcasts a message to in-game global chat. |
+| `/kick` | `!kick` | 🔧 Admin and up | Kicks a player by name or SteamID, with an optional reason. |
+| `/ban` | `!ban` | ⚔️ Head Admin and up | Bans a player by name or SteamID, with an optional reason. |
+| `/console` | `!console` | 🛡️ Co-Owner and up | Sends one raw RCON command and shows the reply. |
+
+Slash replies and refusals are private; `!prefix` replies are public, which is what you want for
+`!pop`. `!prefix` commands need `PREFIX_COMMANDS_ENABLED=true` (the default) and the **Message
+Content Intent** enabled in the Discord developer portal.
+
+## What ends up in the log channels
+
+| Channel | Receives |
+| --- | --- |
+| 🚪 Join & Leave | One embed per player, with ping and session length when they leave. A restart-sized change becomes a single summary instead of a wall of messages. |
+| ⌨️ Command Log | Every staff command: who ran it, their tier, the options, how long it took and any error. |
+| 🚨 Error Log | RCON failures, permission problems and unhandled errors. |
+| 📡 Server Status | Connects and disconnects, plus every change made in `/setup`. |
+
+## Configuration
+
+Everything below is optional except `DISCORD_TOKEN`. Servers are normally added with `/setup`;
+the `RCON_*` block is just a shortcut so slot 1 is ready before the first `/setup`.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `DISCORD_TOKEN` | - | **Required.** Bot token. |
+| `DISCORD_GUILD_ID` | - | Register the slash commands in one server (instant) instead of globally. |
+| `PREFIX_COMMANDS_ENABLED` | `true` | Enable `!prefix` commands. |
+| `PREFIX` | `!` | The prefix character. |
+| `BOT_OWNER_IDS` | - | User ids that may also run `/setup`, comma separated. |
+| `RCON_HOST`, `RCON_PORT`, `RCON_PASSWORD`, `RCON_NAME` | - | Shortcut for server slot 1. |
+| `RCON_TIMEOUT_MS` | `15000` | How long one RCON command may take. |
+| `RCON_MAX_RECONNECT_DELAY_MS` | `30000` | Ceiling for the reconnect backoff. |
+| `RCON_CHAT_CHANNEL_ID` | - | Optional: mirror in-game chat into this channel. |
+| `POLL_INTERVAL_SECONDS` | `20` | One poll drives the status line, `/pop` and the join/leave logs. Floor is 5. |
+| `DATA_DIR` | `./data` | Where `/setup` settings are stored (one JSON file per server, mode 0600). |
+| `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` or `silent`. |
+| `LOG_TIMESTAMPS` | `true` | Prefix log lines with a UTC timestamp. |
+| `PRESENCE_ENABLED` | `true` | Turn the activity line off entirely. |
+| `PRESENCE_GUILD_ID` | - | Which server's servers drive the activity line. |
+| `PRESENCE_SERVER_SLOT` | `1` | `1`, `2`, `3`, or `all` to add every server together. |
+| `PRESENCE_RESTING_ON_RECONNECT` | `false` | Show 🟡 while the bot is reconnecting instead of 🔴. |
+| `PRESENCE_ONLINE_FORMAT` | `🟢 RCON┆👥  {players}/{max} ⏳{queued}/{joining}` | Online template. |
+| `PRESENCE_OFFLINE_FORMAT` | `🔴 RCON┆OFFLINE` | Offline template. |
+| `PRESENCE_RESTING_FORMAT` | `🟡 RCON┆RESTING` | Restarting template. |
+
+Placeholders: `{players}` `{max}` `{maxPlayers}` `{queued}` `{joining}` `{uptime}` `{servers}`.
+Discord renders an activity name on one line and cuts it at 128 characters, so keep templates short.
+
+## Hosting on bot-hosting.net
+
+1. Create a **Node.js** deployment (SFTP or GitHub source).
+2. With GitHub, link `ollybat/pop-rcon-discord` (private repos need a personal access token with
+   `repo` scope) and turn **auto-pull** on.
+3. Set **Startup → Entry File** to `src/index.js`. The panel runs `npm install` from
+   `package.json` itself - never upload `node_modules`.
+4. Add `.env` in the files tab with at least `DISCORD_TOKEN` (and `RCON_*` if you want slot 1
+   ready immediately), then start the deployment.
+5. In the Discord developer portal, enable **Message Content Intent** if you want `!pop`.
+6. The first start registers the slash commands. Global commands can take up to an hour to appear;
+   set `DISCORD_GUILD_ID` to see them instantly.
+
+## Diagnostics
 
 ```bash
-npm test
+npm run check     # parse every file as an ES module
+npm run doctor    # configuration, stored /setup data, every RCON server, the Discord token
+npm test          # unit + end-to-end tests against a mock WebRCON server
 ```
 
-- `test/rcon.test.js` - password-in-URL handshake, reply matching by identifier, JSON replies, chat
-  broadcasts, command timeouts, reconnect after a dropped socket, and that `close()` stops retrying.
-- `test/presence.test.js` - placeholder substitution, `serverinfo` normalisation, all three states,
-  and that the activity is only re-pushed when it changes.
-- `test/e2e.test.js` - a live socket against the mock server, wired to the presence manager and the
-  relay: green status with real counts, yellow while restarting, red while down, relayed chat.
-- `test/config.test.js` - defaults, parsing, the interval floor, and loud failures.
-- `test/logger.test.js` - level filtering, child scopes, formatting.
-- `test/summary.test.js` - password masking and the `serverinfo` summary used by `npm run doctor`.
-
-CI runs `npm run check` and `npm test` on every push and pull request
-(`.github/workflows/ci.yml`).
+`npm run doctor` masks every password and exits non-zero when something is wrong.
+See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) for the usual failures.
 
 ## Project layout
 
 ```
-src/config.js         environment parsing and validation
-src/logger.js         leveled logger (debug/info/warn/error/silent)
-src/rcon.js           Rust WebRCON websocket client (connect, send, auto-reconnect)
-src/presence.js       status state machine and the "Watching ..." activity updater
-src/relay.js          Discord channel relay for chat and connection events
-src/summary.js        password masking and serverinfo summaries
-src/index.js          Discord client wiring, relay hooks, graceful shutdown
-scripts/check.js      syntax-checks every file (npm run check)
-scripts/doctor.js     end-to-end configuration and connectivity check (npm run doctor)
-test/                 unit, integration and mock-server tests
-deploy/               systemd unit for a VPS
-docs/TROUBLESHOOTING.md  what to do when a check fails
+src/
+  index.js        wiring: Discord client, events, command dispatch, graceful shutdown
+  rcon.js         Rust WebRCON websocket client (no Discord knowledge)
+  servers.js      one monitor per server: poll, snapshot, join/leave diffing
+  presence.js     the three-state status line
+  store.js        per-guild settings from /setup (atomic JSON, mode 0600)
+  setup/          the wizard: panel.js builds the components, index.js handles them
+  commands.js     every command, in slash and !prefix form, plus the access gate
+  embeds.js       every embed, in the light blue theme
+  logs.js         routes events into the log channels
+  permissions.js  role/tier checks
+  theme.js        brand, palette, tiers, log kinds
+  format.js       small formatting helpers
+  relay.js        optional in-game chat mirror
 ```
-
-## Security notes
-
-- `.env` is git-ignored - never commit the bot token or the RCON password.
-- Firewall the RCON port to your bot's address only; see [SECURITY.md](SECURITY.md).
-- When slash commands are added, restrict them by role: anyone who can run console commands
-  effectively has admin on your server.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Changes are tracked in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
