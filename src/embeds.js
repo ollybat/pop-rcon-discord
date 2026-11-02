@@ -46,7 +46,7 @@ export function panelEmbed({ guild, config }) {
         ' Rust servers.\nUse the buttons below, then hit **Done** when everything is filled in.\n\n' +
         '**🔒 Nothing here is public.** This panel, every answer and every test result are visible to ' +
         'you alone, RCON passwords are shown masked, and no password is ever written to a log channel ' +
-        'or to the bot's status line.',
+        'or to the status line in my own activity.',
     );
 
   embed.addFields({
