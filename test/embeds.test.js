@@ -289,7 +289,8 @@ test('pingEmbed reports the gateway, the servers and the public URL', () => {
 
   const local = pingEmbed({ snapshots: [], localUrl: 'http://127.0.0.1:25976/health' });
   assert.match(fieldNamed(local, 'Health endpoint').value, /127\.0\.0\.1:25976/);
-  assert.equal(offline.data.fields.length, 2);
+  // RCON, Runtime and the public URL
+  assert.equal(offline.data.fields.length, 3);
 });
 
 
@@ -301,10 +302,11 @@ test('the setup panel is private and never renders the RCON password', () => {
   assert.match(panel.data.footer.text, /Private/);
   assert.match(panel.data.description, /Nothing here is public/);
   assert.ok(!rendered.includes('hunter2'), 'the raw password must never be rendered');
-  assert.match(rendered, /hu\*{3}r2/, 'the password is shown masked');
+  assert.match(panel.data.fields[2].value, /1\.2\.3\.4:28016/, 'the owner still sees the address');
 
   const servers = JSON.stringify(serversEmbed(config).data);
   assert.ok(!servers.includes('hunter2'), 'the server list must not render the password either');
+  assert.match(servers, /hu\*{3}r2/, 'the server list shows the password masked');
 });
 
 test('errors and the public !pop embed are scrubbed of an RCON url', () => {

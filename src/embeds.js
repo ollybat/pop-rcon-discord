@@ -298,7 +298,8 @@ export function statusLogEmbed({ title, description, color = COLORS.brand }) {
 
 /** Used by the command invokers when a command throws. */
 export function errorEmbed(error) {
-  const message = error && error.message ? error.message : String(error);
+  // Scrubbed before it is rendered: an RCON url carries the password in its path.
+  const message = scrubSecrets(error && error.message ? error.message : String(error));
   return baseEmbed({ color: COLORS.danger })
     .setTitle('💥 That did not work')
     .setDescription(truncate(message, 400))
