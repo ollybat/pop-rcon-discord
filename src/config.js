@@ -26,8 +26,15 @@ function optionalBoolean(name, fallback) {
   throw new Error('Environment variable ' + name + ' must be true or false, got "' + raw + '"');
 }
 
-function optionalString(name, fallback) {
+function optionalString(name, fallback = null) {
   return process.env[name]?.trim() || fallback;
+}
+
+function list(name) {
+  return (process.env[name] ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
 }
 
 const DEFAULT_PRESENCE = {
@@ -36,21 +43,44 @@ const DEFAULT_PRESENCE = {
   resting: '🟡 RCON┆RESTING',
 };
 
+/** The .env RCON block is an optional shortcut for slot 1 until /setup saves a server. */
+function envServer() {
+  const host = optionalString('RCON_HOST');
+  const password = optionalString('RCON_PASSWORD');
+  if (!host || !password) return null;
+  return {
+    name: optionalString('RCON_NAME', 'Server 1 (.env)'),
+    host,
+    port: optionalNumber('RCON_PORT', 28016),
+    password,
+  };
+}
+
 export const config = {
   discord: {
     token: required('DISCORD_TOKEN'),
-    consoleChannelId: process.env.CONSOLE_CHANNEL_ID?.trim() || null,
+    // Optional: register the slash commands in this one guild so they appear instantly.
+    guildId: optionalString('DISCORD_GUILD_ID'),
+    prefix: optionalString('PREFIX', '!'),
+    prefixCommandsEnabled: optionalBoolean('PREFIX_COMMANDS_ENABLED', true),
+    botOwnerIds: list('BOT_OWNER_IDS'),
+  },
+  data: {
+    dir: optionalString('DATA_DIR', './data'),
+  },
+  poll: {
+    // One shared interval drives the status line, /pop and the join/leave diffing.
+    intervalSeconds: Math.max(5, optionalNumber('POLL_INTERVAL_SECONDS', optionalNumber('PRESENCE_INTERVAL_SECONDS', 20))),
   },
   rcon: {
-    host: required('RCON_HOST'),
-    port: optionalNumber('RCON_PORT', 28016),
-    password: required('RCON_PASSWORD'),
     timeoutMs: optionalNumber('RCON_TIMEOUT_MS', 15000),
     maxReconnectDelayMs: optionalNumber('RCON_MAX_RECONNECT_DELAY_MS', 30000),
+    fromEnv: envServer(),
   },
   presence: {
     enabled: optionalBoolean('PRESENCE_ENABLED', true),
-    intervalSeconds: Math.max(5, optionalNumber('PRESENCE_INTERVAL_SECONDS', 15)),
+    guildId: optionalString('PRESENCE_GUILD_ID'),
+    serverSlot: optionalString('PRESENCE_SERVER_SLOT', '1'),
     restingOnReconnect: optionalBoolean('PRESENCE_RESTING_ON_RECONNECT', false),
     formats: {
       online: optionalString('PRESENCE_ONLINE_FORMAT', DEFAULT_PRESENCE.online),
@@ -61,5 +91,14 @@ export const config = {
   log: {
     level: optionalString('LOG_LEVEL', 'info').toLowerCase(),
     timestamps: optionalBoolean('LOG_TIMESTAMPS', true),
+    // Optional: mirror in-game Rust chat into this channel.
+    chatChannelId: optionalString('RCON_CHAT_CHANNEL_ID'),
   },
 };
+
+export function presenceSlot(value = config.presence.serverSlot) {
+  const text = String(value ?? '').trim().toLowerCase();
+  if (text === 'all' || text === 'aggregate') return 'all';
+  const slot = Number(text);
+  return Number.isInteger(slot) && slot >= 1 && slot <= 3 ? slot : 1;
+}
