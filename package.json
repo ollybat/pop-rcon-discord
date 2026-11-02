@@ -1,8 +1,8 @@
 {
   "name": "pop-rcon-discord",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "Discord bot that watches a Rust dedicated server console over WebRCON and shows its live status",
+  "description": "Discord bot for Rust dedicated servers: live WebRCON status, /setup wizard, !pop player reports and role-gated staff commands",
   "type": "module",
   "main": "src/index.js",
   "engines": {
