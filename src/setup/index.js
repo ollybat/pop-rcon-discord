@@ -1,36 +1,83 @@
-import { MessageFlags } from 'discord.js';
-import { describeConfig, normalizeServerInput, MAX_SERVERS } from '../store.js';
-import { canRunSetup } from '../permissions.js';
-import { BRAND, COLORS, LOG_KIND_IDS, logKindById, tierById } from '../theme.js';
+import { ChannelType, MessageFlags, PermissionFlagsBits } from 'discord.js';
+import { BRAND, CATEGORY_PRESET, COLORS, LOG_CHANNEL_PRESETS, LOG_KINDS, LOG_KIND_IDS, logKindById, tierById } from '../theme.js';
+import { MAX_SERVERS, describeConfig, emptyGuildConfig, normalizeServerInput } from '../store.js';
+import { canRunSetup, matchRolesByName } from '../permissions.js';
 import { hintEmbed } from '../embeds.js';
-import { mainPanel, logsView, rolePickView, rolesView, serverModal, serversView, slotView, parseCustomId } from './panel.js';
+import { guideView, logsView, mainPanel, parseCustomId, resetView, rolePickView, rolesView, serverModal, serversView, slotView } from './panel.js';
 
 function denied(interaction, gate) {
-  return interaction.reply({
-    content: '⛔ ' + (gate.reason ?? 'Only the Discord server owner can use this.'),
-    flags: MessageFlags.Ephemeral,
-  });
+  return interaction.reply({ content: '⛔ ' + (gate.reason ?? 'Only the Discord server owner can use this.'), flags: MessageFlags.Ephemeral });
 }
 
 async function announce(ctx, guild, title, description, color = COLORS.brand) {
   await ctx.logs.status(guild.id, { title, description, color });
 }
 
-/** Buttons, selects and modals all land here; every branch re-checks the owner gate. */
+function tierLabel(tierId) {
+  const tier = tierById(tierId);
+  return tier ? tier.emoji + ' ' + tier.label : tierId;
+}
+
+function canManageChannels(guild) {
+  return Boolean(guild?.members?.me?.permissions?.has?.(PermissionFlagsBits.ManageChannels));
+}
+
+/** Builds the four log channels (and a category) for every kind that has none yet. */
+async function createLogChannels(guild, config, logger) {
+  if (!canManageChannels(guild)) {
+    return { created: {}, error: 'I need the **Manage Channels** permission to create log channels.' };
+  }
+
+  const created = {};
+  let category = guild.channels.cache.find((channel) => channel.type === ChannelType.GuildCategory && /spinback/i.test(channel.name)) ?? null;
+
+  if (!category) {
+    try {
+      category = await guild.channels.create({ name: CATEGORY_PRESET.name, type: ChannelType.GuildCategory, reason: BRAND.name + ' quick setup' });
+    } catch (error) {
+      logger.warn('[setup] could not create the category: ' + error.message);
+      return { created: {}, error: 'Discord refused the category: ' + error.message };
+    }
+  }
+
+  for (const kind of LOG_KINDS) {
+    if (config.logs?.[kind.id]) continue;
+    const preset = LOG_CHANNEL_PRESETS[kind.id];
+
+    try {
+      const channel = await guild.channels.create({
+        name: preset.name,
+        type: ChannelType.GuildText,
+        parent: category.id,
+        topic: preset.topic,
+        reason: BRAND.name + ' quick setup',
+      });
+      created[kind.id] = channel.id;
+    } catch (error) {
+      logger.warn('[setup] could not create ' + kind.id + ': ' + error.message);
+    }
+  }
+
+  return { created, categoryId: category.id };
+}
+
+/** Re-checks the owner gate on every button, select and modal. */
+async function gate(interaction, ctx) {
+  const check = canRunSetup({ member: interaction.member, user: interaction.user, guild: interaction.guild, botOwnerIds: ctx.botOwnerIds });
+  if (!check.allowed) await denied(interaction, check);
+  return check.allowed;
+}
+
+/** Buttons, selects and modals all land here. */
 export async function handleSetupComponent(interaction, ctx) {
   const parsed = parseCustomId(interaction.customId);
   if (!parsed) return false;
+  if (!(await gate(interaction, ctx))) return true;
 
   const guild = interaction.guild;
-  const gate = canRunSetup({ member: interaction.member, user: interaction.user, guild, botOwnerIds: ctx.botOwnerIds });
-  if (!gate.allowed) {
-    await denied(interaction, gate);
-    return true;
-  }
-
   const config = ctx.store.get(guild.id);
-  const { action, args } = parsed;
   const snapshots = ctx.servers.snapshots(guild.id);
+  const { action, args } = parsed;
 
   switch (action) {
     case 'main':
@@ -42,9 +89,14 @@ export async function handleSetupComponent(interaction, ctx) {
       if (view === 'roles') await interaction.update(rolesView(config));
       else if (view === 'logs') await interaction.update(logsView(config));
       else if (view === 'servers') await interaction.update(serversView(config, { snapshots }));
+      else if (view === 'guide') await interaction.update(guideView(config));
       else await interaction.update(mainPanel(config, { snapshots, guild }));
       return true;
     }
+
+    case 'guide':
+      await interaction.update(guideView(config));
+      return true;
 
     case 'refresh': {
       await ctx.servers.syncGuild(guild.id);
@@ -69,19 +121,15 @@ export async function handleSetupComponent(interaction, ctx) {
         next.roles[tier.id] = roleId;
         return next;
       });
-      await announce(ctx, guild, '🎭 ' + tier.label + ' set', '<@&' + roleId + '> was configured as the ' + tier.emoji + ' ' + tier.label + ' by <@' + interaction.user.id + '>.');
+      await announce(ctx, guild, '🎭 ' + tier.label + ' set', '<@&' + roleId + '> is now the ' + tier.emoji + ' ' + tier.label + '.');
       await interaction.update(rolePickView(updated, tier.id));
       return true;
     }
 
     case 'roleclear': {
       const tier = tierById(args[0]);
-      if (!tier) {
-        await interaction.update(rolesView(config));
-        return true;
-      }
-      if (tier.required) {
-        await interaction.reply({ content: '👑 The ' + tier.label + ' is required — pick a role instead of clearing it.', flags: MessageFlags.Ephemeral });
+      if (!tier || tier.required) {
+        await interaction.update(rolePickView(config, args[0]));
         return true;
       }
 
@@ -89,8 +137,89 @@ export async function handleSetupComponent(interaction, ctx) {
         next.roles[tier.id] = null;
         return next;
       });
-      await announce(ctx, guild, '🧹 ' + tier.label + ' cleared', 'The ' + tier.label + ' was cleared by <@' + interaction.user.id + '>.', COLORS.warning);
       await interaction.update(rolePickView(updated, tier.id));
+      return true;
+    }
+
+    case 'matchroles': {
+      await interaction.deferUpdate();
+      const match = matchRolesByName(guild.roles.cache, config.roles);
+      const updated = await ctx.store.update(guild.id, (next) => {
+        next.roles = match.roles;
+        return next;
+      });
+
+      const found = match.matched.map(tierLabel);
+      const missing = match.unmatched.map(tierLabel);
+      const report = [
+        found.length ? '**Matched:** ' + found.join(', ') : 'I could not match any role by name.',
+        missing.length ? '**Still unset:** ' + missing.join(', ') + ' — pick those by hand.' : 'Every tier is set. 🎉',
+      ].join('\n');
+
+      await interaction.editReply(rolesView(updated));
+      await interaction.followUp({ embeds: [hintEmbed('🪄 Guessed roles from your server', report)], flags: MessageFlags.Ephemeral });
+      await announce(ctx, guild, '🪄 Roles guessed', found.length ? 'Matched ' + found.join(', ') + ' by name.' : 'No roles matched by name.');
+      return true;
+    }
+
+    case 'createlogs': {
+      await interaction.deferUpdate();
+      const result = await createLogChannels(guild, config, ctx.logger);
+
+      if (result.error) {
+        await interaction.editReply(logsView(config));
+        await interaction.followUp({ embeds: [hintEmbed('📁 Could not create the channels', result.error, COLORS.warning)], flags: MessageFlags.Ephemeral });
+        return true;
+      }
+
+      const updated = await ctx.store.update(guild.id, (next) => {
+        for (const [kindId, channelId] of Object.entries(result.created)) next.logs[kindId] = channelId;
+        return next;
+      });
+
+      const made = Object.keys(result.created).map((kindId) => logKindById(kindId).emoji + ' <#' + result.created[kindId] + '>');
+      await interaction.editReply(logsView(updated));
+      await interaction.followUp({
+        embeds: [
+          hintEmbed(
+            '📁 Channels ready',
+            made.length ? 'Created and selected:\n' + made.join('\n') : 'Nothing to create — every log channel was already set.',
+          ),
+        ],
+        flags: MessageFlags.Ephemeral,
+      });
+      await announce(ctx, guild, '📁 Log channels created', made.length ? made.join(' • ') : 'All log channels were already configured.');
+      return true;
+    }
+
+    case 'quick': {
+      await interaction.deferUpdate();
+
+      const match = matchRolesByName(guild.roles.cache, config.roles);
+      const channels = await createLogChannels(guild, config, ctx.logger);
+      const updated = await ctx.store.update(guild.id, (next) => {
+        next.roles = match.roles;
+        for (const [kindId, channelId] of Object.entries(channels.created ?? {})) next.logs[kindId] = channelId;
+        return next;
+      });
+
+      const status = describeConfig(updated);
+      const report = [
+        match.matched.length ? '🎭 **Roles matched:** ' + match.matched.map(tierLabel).join(', ') : '🎭 No role matched by name — pick them in 🎭 Roles.',
+        match.unmatched.length ? '🎭 **Still to pick:** ' + match.unmatched.map(tierLabel).join(', ') : '🎭 Every staff tier is set.',
+        channels.error
+          ? '📋 ' + channels.error
+          : Object.keys(channels.created ?? {}).length
+            ? '📋 **Channels created:** ' + Object.keys(channels.created).map((kindId) => logKindById(kindId).label).join(', ')
+            : '📋 Every log channel was already set.',
+        status.servers > 0
+          ? '🖥️ Now press ✅ **Done**.'
+          : '🖥️ **Last step:** 🖥️ Servers → pick slot 1 → **Add** → your IP, RCON port and RCON password, then **Test**.',
+      ].join('\n\n');
+
+      await interaction.editReply(mainPanel(updated, { snapshots: ctx.servers.snapshots(guild.id), guild }));
+      await interaction.followUp({ embeds: [hintEmbed('⚡ Quick setup', report, status.servers > 0 ? COLORS.success : COLORS.brand)], flags: MessageFlags.Ephemeral });
+      await announce(ctx, guild, '⚡ Quick setup used', 'Roles and log channels were filled in automatically where possible.');
       return true;
     }
 
@@ -107,7 +236,7 @@ export async function handleSetupComponent(interaction, ctx) {
         return next;
       });
       await interaction.update(logsView(updated));
-      if (channelId) await announce(ctx, guild, kind.emoji + ' ' + kind.label + ' log set', 'Log channel set to <#' + channelId + '> by <@' + interaction.user.id + '>.');
+      if (channelId) await announce(ctx, guild, kind.emoji + ' ' + kind.label + ' log set', 'Log channel set to <#' + channelId + '>.');
       return true;
     }
 
@@ -117,7 +246,6 @@ export async function handleSetupComponent(interaction, ctx) {
         return next;
       });
       await interaction.update(logsView(updated));
-      await announce(ctx, guild, '🧹 Log channels cleared', 'All log channels were cleared by <@' + interaction.user.id + '>.', COLORS.warning);
       return true;
     }
 
@@ -150,7 +278,7 @@ export async function handleSetupComponent(interaction, ctx) {
         return next;
       });
       await ctx.servers.syncGuild(guild.id);
-      await announce(ctx, guild, '🗑️ Server removed', '**' + server.name + '** was removed from slot ' + slot + ' by <@' + interaction.user.id + '>.', COLORS.warning);
+      await announce(ctx, guild, '🗑️ Server removed', '**' + server.name + '** was removed from slot ' + slot + '.', COLORS.warning);
       await interaction.update(slotView(updated, slot));
       return true;
     }
@@ -169,11 +297,15 @@ export async function handleSetupComponent(interaction, ctx) {
       const snapshot = monitor ? await monitor.refresh() : null;
 
       if (snapshot && snapshot.connected) {
+        const peak = snapshot.info?.players ?? 0;
         await interaction.editReply({
           embeds: [
             hintEmbed(
               '✅ ' + server.name + ' answered',
-              'Players: ' + (snapshot.info ? snapshot.info.players + '/' + snapshot.info.max : 'unknown') + '\nLatency: ' + (snapshot.latencyMs ?? '—') + 'ms\nHostname: ' + (snapshot.info?.hostname ?? 'unknown'),
+              'Players: **' + (snapshot.info ? snapshot.info.players + '/' + snapshot.info.max : peak) + '**' +
+                '\nQueue: ' + (snapshot.info?.queued ?? 0) + ' • Joining: ' + (snapshot.info?.joining ?? 0) +
+                '\nLatency: ' + (snapshot.latencyMs ?? '—') + 'ms' +
+                '\nHostname: ' + (snapshot.info?.hostname ?? 'unknown'),
               COLORS.success,
             ),
           ],
@@ -183,8 +315,10 @@ export async function handleSetupComponent(interaction, ctx) {
           embeds: [
             hintEmbed(
               '⛔ No answer from ' + server.name,
-              (snapshot?.error ? snapshot.error + '\n\n' : '') +
-                'Check that the server was started with \`+rcon.web 1 +rcon.port ' + server.port + ' +rcon.password ...\`, that the port is open over TCP, and that the password matches.',
+              (snapshot?.error ? '**' + snapshot.error + '**\n\n' : '') +
+                'Check that the server starts with \`+rcon.web 1 +rcon.port ' + server.port + ' +rcon.password ...\`,' +
+                '\nthat port ' + server.port + ' is open over **TCP**, and that the password matches exactly.' +
+                '\n\nConsole Edition (Xbox/PlayStation) has no RCON at all.',
               COLORS.danger,
             ),
           ],
@@ -193,23 +327,46 @@ export async function handleSetupComponent(interaction, ctx) {
       return true;
     }
 
+    case 'reset':
+      await interaction.update(resetView(config));
+      return true;
+
+    case 'resetconfirm': {
+      await interaction.deferUpdate();
+      const blank = await ctx.store.save(guild.id, emptyGuildConfig(guild.id));
+      await ctx.servers.syncGuild(guild.id);
+      await announce(ctx, guild, '🧹 Setup wiped', '<@' + interaction.user.id + ' cleared every role, log channel and server.', COLORS.warning);
+      await interaction.editReply(mainPanel(blank, { snapshots: [], guild }));
+      await interaction.followUp({ embeds: [hintEmbed('🧹 Everything cleared', 'Start again with ⚡ Quick setup, or fill in the sections one by one.', COLORS.warning)], flags: MessageFlags.Ephemeral });
+      return true;
+    }
+
     case 'done': {
       const fresh = ctx.store.get(guild.id);
       const status = describeConfig(fresh);
       const missing = [
-        fresh.roles?.owner ? null : '👑 Owner Role',
-        status.servers > 0 ? null : 'at least one server (🖥️ Servers)',
-        status.logs > 0 ? null : 'a log channel is optional but recommended (📋 Logs)',
+        fresh.roles?.owner ? null : '👑 Owner Role — press 🪄 Guess roles or pick one',
+        status.servers > 0 ? null : '🖥️ at least one server — Servers → slot 1 → Add',
+        status.logs > 0 ? null : '📋 log channels (optional — press 📁 Make channels)',
       ].filter(Boolean);
 
       const body = status.ready
-        ? 'Everything needed is configured:\n' +
-          '• ' + status.roles + ' staff role(s)\n' +
-          '• ' + status.logs + ' log channel(s)\n' +
-          '• ' + status.servers + ' server(s)\n\nStaff commands now follow these roles, and /pop is live.'
-        : 'Still missing:\n' + missing.map((line) => '• ' + line).join('\n');
+        ? [
+            '**Everything is set:**',
+            '🎭 ' + status.roles + ' staff role(s)',
+            '📋 ' + status.logs + ' log channel(s)',
+            '🖥️ ' + status.servers + ' server(s)',
+            '',
+            'The activity line is live and staff commands now follow these roles.',
+            'Try **/pop** for who is online and **/status** for server health.',
+          ].join('\n')
+        : ['**Still missing:**', ...missing.map((line) => '• ' + line), '', 'Press 📖 **Guide** if you are not sure where to start.'].join('\n');
 
-      await interaction.update({ embeds: [hintEmbed(status.ready ? '✅ Setup complete' : '⚠️ Almost there', body, status.ready ? COLORS.success : COLORS.warning)], components: mainPanel(fresh, { snapshots, guild }).components });
+      await interaction.update({
+        embeds: [hintEmbed(status.ready ? '✅ Setup complete' : '⚠️ Almost there', body, status.ready ? COLORS.success : COLORS.warning)],
+        components: mainPanel(fresh, { snapshots, guild }).components,
+      });
+
       if (status.ready) await announce(ctx, guild, '✅ Setup completed', '<@' + interaction.user.id + ' finished the ' + BRAND.name + ' setup.');
       return true;
     }
@@ -224,14 +381,9 @@ export async function handleSetupComponent(interaction, ctx) {
 export async function handleSetupModal(interaction, ctx) {
   const parsed = parseCustomId(interaction.customId);
   if (!parsed || parsed.action !== 'modalslot') return false;
+  if (!(await gate(interaction, ctx))) return true;
 
   const guild = interaction.guild;
-  const gate = canRunSetup({ member: interaction.member, user: interaction.user, guild, botOwnerIds: ctx.botOwnerIds });
-  if (!gate.allowed) {
-    await denied(interaction, gate);
-    return true;
-  }
-
   const slot = Number(parsed.args[0]);
   if (!Number.isInteger(slot) || slot < 1 || slot > MAX_SERVERS) {
     await interaction.reply({ content: '⛔ Unknown server slot.', flags: MessageFlags.Ephemeral });
@@ -258,12 +410,7 @@ export async function handleSetupModal(interaction, ctx) {
     return next;
   });
   await ctx.servers.syncGuild(guild.id);
-  await announce(
-    ctx,
-    guild,
-    '🖥️ Server saved in slot ' + slot,
-    '**' + result.value.name + '** (' + result.value.host + ':' + result.value.port + ') was saved by <@' + interaction.user.id + '>.',
-  );
+  await announce(ctx, guild, '🖥️ Server saved in slot ' + slot, '**' + result.value.name + '** (' + result.value.host + ':' + result.value.port + ').');
 
   const payload = slotView(updated, slot, ctx.servers.snapshot(guild.id, slot));
 
