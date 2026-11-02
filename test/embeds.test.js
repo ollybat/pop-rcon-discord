@@ -1,14 +1,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { COLORS, STATUS } from '../src/theme.js';
-import { emptyGuildConfig } from '../src/store.js';
+import { emptyGuildConfig, recordPeak } from '../src/store.js';
 import {
   baseEmbed,
   commandLogEmbed,
   errorEmbed,
   errorLogEmbed,
+  guideEmbed,
+  helpEmbed,
   joinLeaveEmbed,
   panelEmbed,
+  peakLine,
   playerLines,
   popServerEmbed,
   popSetupHintEmbed,
@@ -16,7 +19,9 @@ import {
   rolesEmbed,
   serverLine,
   serversEmbed,
+  statusEmbed,
   statusLogEmbed,
+  welcomeEmbed,
 } from '../src/embeds.js';
 
 const guild = { name: 'Spinback HQ' };
@@ -216,4 +221,90 @@ test('error, status, summary and hint embeds render', () => {
   assert.match(popSetupHintEmbed().data.description, /\/setup/);
   assert.match(errorEmbed(new Error('nope')).data.description, /nope/);
   assert.equal(errorEmbed(new Error('nope')).data.color, COLORS.danger);
+});
+
+test('peakLine shows today\'s busiest moment', () => {
+  const config = buildConfig();
+  assert.equal(peakLine(config, 1), null, 'nothing recorded yet');
+
+  recordPeak(config, 1, 63, new Date());
+  assert.match(peakLine(config, 1, 200), /\*\*63\/200\*\*/);
+  assert.match(peakLine(config, 1), /\*\*63\*\*/);
+  assert.equal(peakLine(config, 3), null, 'an empty slot has no peak');
+});
+
+test('popServerEmbed can carry the peak of the day', () => {
+  const embed = popServerEmbed(
+    {
+      slot: 1,
+      name: 'Spinback 5X EU',
+      connected: true,
+      info: { players: 12, max: 100, queued: 0, joining: 0, uptime: 60, restarting: false, hostname: 'S' },
+      players: [],
+      latencyMs: 4,
+      at: null,
+    },
+    { peak: '**63/100** at 19:30 UTC' },
+  );
+
+  assert.match(fieldNamed(embed, 'Peak today').value, /63\/100/);
+});
+
+test('statusEmbed reports reachability, totals and peaks', () => {
+  const config = buildConfig();
+  recordPeak(config, 1, 63, new Date());
+
+  const embed = statusEmbed({
+    config,
+    guild,
+    snapshots: [
+      {
+        slot: 1,
+        name: 'Spinback 5X EU',
+        connected: true,
+        info: { players: 12, max: 100, queued: 0, joining: 0, uptime: 3600, restarting: false, hostname: 'S' },
+        latencyMs: 8,
+        at: null,
+      },
+      { slot: 2, name: 'Second', connected: false, info: null, latencyMs: null, at: null, error: 'ECONNREFUSED' },
+    ],
+  });
+
+  assert.match(embed.data.title, /status/i);
+  assert.match(embed.data.description, /1\/2/);
+  assert.match(embed.data.description, /12\/100/);
+  assert.match(embed.data.fields[0].value, /Peak today/);
+  assert.match(embed.data.fields[1].value, /ECONNREFUSED/);
+
+  assert.match(statusEmbed({ snapshots: [], config }).data.description, /\/setup/);
+});
+
+test('helpEmbed advertises every command and the prefix form', () => {
+  const embed = helpEmbed({ prefix: '!', prefixEnabled: true, config: buildConfig() });
+
+  for (const name of ['/pop', '/status', '/help', '/players', '/say', '/kick', '/ban', '/console', '/setup']) {
+    assert.ok(embed.data.description.includes(name), name + ' should be documented');
+  }
+  assert.match(embed.data.description, /!pop/);
+  assert.match(embed.data.fields[0].value, /three servers/);
+  assert.match(embed.data.footer.text, /setup/);
+
+  const quiet = helpEmbed({ prefix: '!', prefixEnabled: false, config: emptyGuildConfig('g') });
+  assert.ok(!quiet.data.description.includes('!pop'), 'no prefix form when prefix commands are off');
+  assert.match(quiet.data.footer.text, /Run \/setup/);
+});
+
+test('guideEmbed shows the exact Rust start line', () => {
+  const embed = guideEmbed({ config: buildConfig() });
+  assert.match(embed.data.description, /\+rcon\.web 1/);
+  assert.match(embed.data.description, /rcon\.port 28016/);
+  assert.match(embed.data.description, /Guess roles/);
+  assert.match(embed.data.footer.text, /Console Edition/);
+});
+
+test('welcomeEmbed tells a new server owner what to do first', () => {
+  const embed = welcomeEmbed({ prefix: '!', prefixEnabled: true });
+  assert.match(embed.data.description, /\/setup/);
+  assert.match(embed.data.description, /Guess roles/);
+  assert.match(embed.data.description, /!pop/);
 });
