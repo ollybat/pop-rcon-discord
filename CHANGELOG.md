@@ -25,10 +25,30 @@ A record book, and an MCP server so the same servers can be read without Discord
   server on stdio, sends `initialize` / `tools/list` / `tools/call` down the pipe and checks the
   answers. Handy as a one-shot start command on a host.
 
+### Fixed
+
+The whole suite was run for real for the first time on Node 24 with real `discord.js`, and it
+found seven genuine bugs. Every one is fixed, and `npm run ci` now covers them:
+
+- **Every poll reported a phantom join and leave for every player.** `ServerMonitor.refresh()`
+  handed its internal player Map to `diffPlayers`, which expects the roster array, so each poll
+  produced a join and a leave for everyone online. The join & leave log channel would have been
+  pure noise.
+- **A dropped socket kept showing players until the next poll.** The snapshot now goes
+  `connected: false` the moment the RCON socket closes, so the status line turns red straight away.
+- **Two polls could run at once** (the interval plus a `/pop` refresh), which is what made the first
+  tests flaky. Polls are single-flight now, and `start()` seeds the roster before the interval
+  begins.
+- `duration(null)` returned `0s` instead of `—`, so a server that does not report uptime showed
+  "0s uptime".
+- `quoteArgument('say "hi"')** doubled the spaces instead of collapsing them.
+- A mistyped `RCON_PORT` was silently ignored unless `RCON_HOST` and `RCON_PASSWORD` were also set.
+- `/status` printed the peak of the day without saying what it was; it is labelled now.
+
 ### Changed
 
-- `/help` documents the two new commands, and the peek at `HISTORY_DAYS` replaced the earlier
-  today-only statistics.
+- `/help` documents the two new commands, and the peak history replaced the earlier today-only
+  statistics.
 
 ## [0.5.1]
 

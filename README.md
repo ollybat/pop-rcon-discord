@@ -171,7 +171,7 @@ Discord renders an activity name on one line and cuts it at 128 characters, so k
 npm run check     # parse every file as an ES module
 npm run doctor    # configuration, stored /setup data, every RCON server, the Discord token
 npm test        # unit tests
-npm run ci      # unit tests + a real stdio smoke test of the MCP server          # unit + end-to-end tests against a mock WebRCON server
+npm run ci      # unit tests + a real stdio smoke test of the MCP server, writes ci-report.txt          # unit + end-to-end tests against a mock WebRCON server
 ```
 
 `npm run doctor` masks every password and exits non-zero when something is wrong.
