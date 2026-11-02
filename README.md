@@ -10,14 +10,21 @@ staff a **/setup** wizard, **/pop** player reports and role-gated staff commands
 
 - **Live status line** - 🟢 online with players/max and queue, 🔴 offline, 🟡 resting (the server is
   restarting). Up to three servers can be added together.
-- **/setup wizard** - buttons and dropdowns, no JSON and no config files to hand edit:
-  five staff roles, four log channels and up to three servers.
-- **/pop** - who is online right now, with a population bar, queue, uptime and the player list.
+- **/setup wizard** - buttons and dropdowns, no JSON and no config files to hand edit: five staff
+  roles, four log channels and up to three servers. Or press **⚡ Quick setup** and it guesses your
+  existing roles by name and creates the four log channels for you.
+- **/pop** - who is online right now, with a population bar, queue, uptime, today's peak and the
+  player list. The buttons under it switch server, refresh on demand and hide the list.
+- **/status** - is every server reachable, how many players in total, and today's busiest moment.
+- **/help** - every command grouped by the tier it needs.
 - **Logs** - join & leave (with session length), every staff command, errors, and server
   connects/disconnects.
 - **Staff commands** - /players, /say, /kick, /ban, /console, gated by the roles you picked in
   /setup.
-- **Light blue everywhere** - every embed uses the Spinback palette and footer.
+- **Daily peaks** - the busiest moment of each day is remembered per server and shown in /pop and
+  /status.
+- **Light blue everywhere** - every embed uses the Spinback palette and footer, and the bot wears
+  the name Spinback in your server.
 
 ## Requirements
 
@@ -62,11 +69,18 @@ Then run **/setup** in your server - see [docs/SETUP.md](docs/SETUP.md) for the 
 `/setup` opens a private panel with a summary and five buttons: **Roles**, **Logs**, **Servers**,
 **Refresh** and **Done**.
 
-| Step | What you configure |
+| Button | What it does |
 | --- | --- |
 | 🎭 Roles | 👑 Owner (required), 🛡️ Co-Owner, ⚔️ Head Admin, 🔧 Admin, 🔨 Moderator |
 | 📋 Logs | 🚪 Join & Leave, ⌨️ Command Log, 🚨 Error Log, 📡 Server Status |
-| 🖥️ Servers | Up to three servers: name, IP/host, RCON port, RCON password |
+| 🖥️ Servers | Up to three servers: name, IP/host, RCON port, RCON password, with a **Test** button |
+| ⚡ Quick setup | Fills in what it can: 🪄 guesses your roles by name + 📁 builds a category with the four log channels |
+| 🪄 Guess roles | Matches Owner / Co-Owner / Head Admin / Admin / Mod roles you already have |
+| 📁 Make channels | Creates \`🎧 Spinback\` with 🚪・joins-leaves, ⌨️・staff-commands, 🚨・bot-errors, 📡・server-status |
+| 📖 Guide | The one-page "how do I turn RCON on" walkthrough with the exact start line |
+| 🔄 Refresh | Reconnects and re-reads every server |
+| ✅ Done | Checklist of what is configured and what is still missing |
+| 🧹 Reset | Wipes every saved role, channel and server for this Discord server |
 
 Only the **Discord server owner** (or a **bot owner** listed in `BOT_OWNER_IDS`) can use `/setup`.
 Every other command follows the roles you saved: a member with the ⚔️ Head Admin role can use
@@ -99,8 +113,9 @@ Content Intent** enabled in the Discord developer portal.
 
 ## Configuration
 
-Everything below is optional except `DISCORD_TOKEN`. Servers are normally added with `/setup`;
-the `RCON_*` block is just a shortcut so slot 1 is ready before the first `/setup`.
+Everything below is optional except `DISCORD_TOKEN`. Roles, log channels and servers all live in
+Discord: `/setup` writes them to `DATA_DIR`. The `RCON_*` block at the bottom is only an
+advanced shortcut that pre-fills server slot 1 before the first `/setup`.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
@@ -163,6 +178,7 @@ src/
   store.js        per-guild settings from /setup (atomic JSON, mode 0600)
   setup/          the wizard: panel.js builds the components, index.js handles them
   commands.js     every command, in slash and !prefix form, plus the access gate
+  pop.js          the interactive /pop: embeds plus the switch/refresh/toggle buttons
   embeds.js       every embed, in the light blue theme
   logs.js         routes events into the log channels
   permissions.js  role/tier checks

@@ -62,6 +62,16 @@ If you want the `!pop` prefix commands, also enable **Message Content Intent** o
 Type `/setup` in any channel. Only the **server owner** (or a **bot owner** from
 `BOT_OWNER_IDS`) gets the panel; everyone else is told to ask an owner.
 
+### The 60 second version
+
+1. `/setup` → **⚡ Quick setup**. It matches your existing Owner / Admin / Mod roles by name and
+   creates a `🎧 Spinback` category with the four log channels.
+2. **🖥️ Servers** → slot 1 → **Add** → IP, RCON port, RCON password → **Test**.
+3. **✅ Done** → checklist. If it is green you are finished: the status line is live and
+   `/pop` works.
+
+Everything below is the long version, if you would rather pick each thing by hand.
+
 ### 🎭 Roles
 
 Pick the Discord role for each staff tier. Only 👑 **Owner Role** is required.
