@@ -138,6 +138,10 @@ export class ServerMonitor {
     });
 
     this.rcon.on('disconnected', (details) => {
+      // Say so immediately: waiting for the next poll would leave the status line showing players
+      // for up to a whole interval after the server went away.
+      this.snapshot = { ...this.snapshot, connected: false, reconnecting: true, at: new Date().toISOString() };
+      this.onSnapshot?.(this.snapshot);
       this.onStatus?.({ type: 'disconnected', server: this.server, code: details?.code, reason: details?.reason });
     });
 

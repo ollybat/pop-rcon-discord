@@ -91,6 +91,7 @@ test('serverSignature changes when a server changes', () => {
 });
 
 test('a poll diffs the roster, not the internal map', async () => {
+  const silent = { debug() {}, info() {}, warn() {}, error() {} };
   // A monitor that polls the same roster twice must report no changes at all. Passing the player
   // Map to diffPlayers instead of the array reported every player as leaving and joining.
   const { ServerMonitor } = await import('../src/servers.js');
@@ -98,7 +99,7 @@ test('a poll diffs the roster, not the internal map', async () => {
     guildId: 'guild-1',
     server: { slot: 1, name: 'Spinback 5X EU', host: '127.0.0.1', port: 28016, password: 'x' },
     pollIntervalMs: 60000,
-    logger: silentLogger,
+    logger: silent,
   });
 
   const events = [];
