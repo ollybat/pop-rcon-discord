@@ -19,7 +19,7 @@ import { join } from 'node:path';
 import { RustRconClient } from '../src/rcon.js';
 
 export const SERVER_NAME = 'spinback';
-export const SERVER_VERSION = '0.6.4';
+export const SERVER_VERSION = '0.7.0';
 export const PROTOCOL_VERSION = '2024-11-05';
 
 const DEFAULT_PORT = 28016;
