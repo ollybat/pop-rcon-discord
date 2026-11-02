@@ -1,6 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { COLORS, TIERS, tierById } from './theme.js';
-import { baseEmbed, helpEmbed, playerLines, popSetupHintEmbed, statusEmbed } from './embeds.js';
+import { baseEmbed, boardEmbed, helpEmbed, playerLines, popSetupHintEmbed, statusEmbed } from './embeds.js';
 import { popPayload, popPlaceholder } from './pop.js';
 import { codeBlock, duration, quoteArgument } from './format.js';
 import { canRun } from './permissions.js';
@@ -62,6 +62,18 @@ export const commands = [
       await ctx.invoker.defer();
       const snapshots = await ctx.servers.refreshGuild(ctx.guild.id);
       await ctx.invoker.edit({ embeds: [statusEmbed({ snapshots, config: ctx.guildConfig, guild: ctx.guild })] });
+    },
+  },
+  {
+    name: 'board',
+    description: 'The busiest days this server has seen',
+    prefixUsage: '!board',
+    minTier: null,
+    data: new SlashCommandBuilder().setName('board').setDescription('The busiest days this server has seen'),
+    async run(ctx) {
+      await ctx.invoker.defer();
+      const snapshots = ctx.servers.snapshots(ctx.guild.id);
+      await ctx.invoker.edit({ embeds: [boardEmbed({ config: ctx.guildConfig, snapshots })] });
     },
   },
   {
@@ -152,6 +164,22 @@ export const commands = [
       const reason = ctx.options.string('reason') ?? ctx.args.slice(1).join(' ') ?? 'Kicked by staff';
       const reply = await ctx.servers.query(ctx.guild.id, ctx.options.integer('server') ?? ctx.slot, 'kick ' + quoteArgument(player) + ' ' + quoteArgument(reason));
       await ctx.invoker.edit({ embeds: [okEmbed('👢 Kicked', '**' + player + '** — ' + reason, reply)] });
+    },
+  },
+  {
+    name: 'save',
+    description: 'Ask the Rust server to save the world',
+    prefixUsage: '!save [slot]',
+    minTier: 'admin',
+    data: new SlashCommandBuilder()
+      .setName('save')
+      .setDescription('Ask the Rust server to save the world (RCON server.save)')
+      .addIntegerOption((option) => option.setName('server').setDescription('Server slot (1-3)').setMinValue(1).setMaxValue(3).setRequired(false)),
+    async run(ctx) {
+      await ctx.invoker.defer();
+      const slot = ctx.options.integer('server') ?? ctx.slot;
+      const reply = await ctx.servers.query(ctx.guild.id, slot, 'server.save');
+      await ctx.invoker.edit({ embeds: [okEmbed('💾 Save requested', 'Server ' + slot + ' was asked to save the world.', reply)] });
     },
   },
   {
