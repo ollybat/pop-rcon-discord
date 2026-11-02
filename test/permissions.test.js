@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { canRun, canRunSetup, isBotOwner, isGuildOwner, tierLadder, tierOfMember } from '../src/permissions.js';
+import { canRun, canRunSetup, isBotOwner, isGuildOwner, matchRolesByName, tierLadder, tierOfMember } from '../src/permissions.js';
 
 const roles = { owner: '100', coOwner: '200', headAdmin: '300', admin: '400', moderator: '500' };
 
@@ -72,4 +72,29 @@ test('tierLadder lists every tier from the top down', () => {
   const ladder = tierLadder();
   assert.match(ladder, /👑 Owner Role/);
   assert.ok(ladder.indexOf('👑') < ladder.indexOf('🔨'));
+});
+
+test('matchRolesByName guesses the staff tiers from the roles already in the server', () => {
+  const available = new Map([
+    ['1', { id: '1', name: 'Server Owner', position: 10, managed: false }],
+    ['2', { id: '2', name: 'Head Admin', position: 8, managed: false }],
+    ['3', { id: '3', name: 'Spinback Bot', position: 9, managed: true }],
+    ['4', { id: '4', name: 'Moderator', position: 5, managed: false }],
+    ['5', { id: '5', name: '@everyone', position: 0, managed: false }],
+  ]);
+
+  const result = matchRolesByName(available, { admin: '99' });
+
+  assert.equal(result.roles.owner, '1');
+  assert.equal(result.roles.headAdmin, '2');
+  assert.equal(result.roles.moderator, '4');
+  assert.equal(result.roles.admin, '99', 'an already configured tier is left alone');
+  assert.deepEqual(result.unmatched, ['coOwner']);
+  assert.ok(result.matched.includes('owner'));
+});
+
+test('matchRolesByName copes with an empty role list', () => {
+  const result = matchRolesByName([], {});
+  assert.deepEqual(result.matched, []);
+  assert.equal(result.roles.owner, null);
 });
