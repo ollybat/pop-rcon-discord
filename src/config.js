@@ -47,11 +47,13 @@ const DEFAULT_PRESENCE = {
 function envServer() {
   const host = optionalString('RCON_HOST');
   const password = optionalString('RCON_PASSWORD');
+  // Validate the port whenever it is set, so a typo is reported even before host/password exist.
+  const port = optionalNumber('RCON_PORT', 28016);
   if (!host || !password) return null;
   return {
     name: optionalString('RCON_NAME', 'Server 1 (.env)'),
     host,
-    port: optionalNumber('RCON_PORT', 28016),
+    port,
     password,
   };
 }

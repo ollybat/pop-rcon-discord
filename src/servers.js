@@ -109,6 +109,7 @@ export class ServerMonitor {
     this.firstSeen = new Map();
     this.seeded = false;
     this.timer = null;
+    this.polling = null;
 
     this.rcon = new RustRconClient({
       host: server.host,
@@ -149,6 +150,8 @@ export class ServerMonitor {
 
   async start() {
     await this.rcon.connect().catch((error) => this.report(error, 'connect'));
+    // Seed the roster before the interval starts, so the first manual refresh cannot race it.
+    await this.refresh().catch(() => {});
 
     this.timer = setInterval(() => {
       this.refresh().catch(() => {});
@@ -173,7 +176,21 @@ export class ServerMonitor {
   }
 
   /** One poll: serverinfo + playerlist, then diff the roster. */
+  /**
+   * Poll the server once. Two callers (the interval and a /pop refresh) never overlap: the second
+   * one waits for the poll already in flight, which is what stopped a double poll from reporting
+   * the whole roster as fresh joins.
+   */
   async refresh() {
+    if (this.polling) return this.polling;
+
+    this.polling = this.poll().finally(() => {
+      this.polling = null;
+    });
+    return this.polling;
+  }
+
+  async poll() {
     if (!this.rcon.connected) {
       this.snapshot = { ...this.snapshot, connected: false, at: new Date().toISOString() };
       this.onSnapshot?.(this.snapshot);

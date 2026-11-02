@@ -84,6 +84,8 @@ function tryParse(text) {
 
 /** "1h 12m", for uptime and session length. */
 export function human(seconds) {
+  // null / undefined / '' mean "the server did not say", which is not the same as zero.
+  if (seconds === null || seconds === undefined || seconds === '') return 'unknown';
   if (!Number.isFinite(Number(seconds))) return 'unknown';
   let left = Math.max(0, Math.floor(Number(seconds)));
   const days = Math.floor(left / 86400);

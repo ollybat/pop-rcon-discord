@@ -59,13 +59,13 @@ test('the setup panel summarises roles, logs, servers and readiness', () => {
   assert.match(embed.data.title, /Spinback setup/);
 
   const roles = fieldNamed(embed, 'Staff roles');
+  assert.match(roles.name, /\(2\/5\)/, 'the field name counts the roles that are set');
   assert.match(roles.value, /<@&100>/);
-  assert.match(roles.value, /2\/5/);
   assert.match(roles.value, /not set/);
 
   const logs = fieldNamed(embed, 'Log channels');
+  assert.match(logs.name, /\(1\/4\)/);
   assert.match(logs.value, /<#200>/);
-  assert.match(logs.value, /1\/4/);
 
   const servers = fieldNamed(embed, 'Servers');
   assert.match(servers.value, /Spinback 5X EU \(1\.2\.3\.4:28016\)/);
@@ -79,7 +79,8 @@ test('the setup panel says what is still missing', () => {
   const embed = panelEmbed({ guild, config: emptyGuildConfig('g') });
   assert.equal(embed.data.color, COLORS.brand);
   assert.match(embed.data.title, /setup/i);
-  assert.match(fieldValues(embed).join(' '), /Not finished/);
+  assert.match(fieldNamed(embed, 'Not finished')?.name ?? '', /Not finished/);
+  assert.match(fieldValues(embed).join(' '), /Still needed/);
   assert.match(fieldValues(embed).join(' '), /Owner Role/);
 });
 

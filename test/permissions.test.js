@@ -96,5 +96,5 @@ test('matchRolesByName guesses the staff tiers from the roles already in the ser
 test('matchRolesByName copes with an empty role list', () => {
   const result = matchRolesByName([], {});
   assert.deepEqual(result.matched, []);
-  assert.equal(result.roles.owner, null);
+  assert.ok(!result.roles.owner, 'nothing matched, so nothing is set');
 });

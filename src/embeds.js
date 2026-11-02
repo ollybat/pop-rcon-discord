@@ -373,7 +373,7 @@ export function statusEmbed({ snapshots, config, guild }) {
     const peak = peakLine(config, snapshot.slot, snapshot.info?.max ?? null);
     embed.addFields({
       name: 'Server ' + snapshot.slot,
-      value: truncate(statusRow(snapshot) + (peak ? '\n' + peak : ''), 300),
+      value: truncate(statusRow(snapshot) + (peak ? '\n📈 Peak today: ' + peak : ''), 300),
       inline: false,
     });
   }
