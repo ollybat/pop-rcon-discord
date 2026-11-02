@@ -3,6 +3,8 @@ export const BRAND = {
   name: 'Spinback',
   tagline: 'Spinback pop bot',
   serverDefault: 'Spinback 5X EU',
+  clan: 'Spinback clan',
+  version: '0.5.0',
 };
 
 /** Light blue is the brand colour; the rest stay semantic so status is still readable. */
@@ -86,6 +88,25 @@ export const TIERS = [
 ];
 
 export const TIER_IDS = TIERS.map((tier) => tier.id);
+
+/** Names the wizard looks for when it guesses your existing staff roles. */
+export const TIER_MATCHERS = {
+  owner: ['owner', 'founder', 'leader', 'boss', 'chief'],
+  coOwner: ['co-owner', 'co owner', 'coowner', 'deputy', 'vice'],
+  headAdmin: ['head admin', 'headadmin', 'head-admin', 'senior admin', 'super admin', 'manager'],
+  admin: ['admin', 'administrator'],
+  moderator: ['moderator', 'mod ', 'mods', 'helper', 'staff', 'trial'],
+};
+
+/** Channels the Quick setup button creates when you have none yet. */
+export const LOG_CHANNEL_PRESETS = {
+  joinLeave: { name: '🚪・joins-leaves', topic: 'Spinback: who joins and leaves the Rust servers' },
+  commands: { name: '⌨️・staff-commands', topic: 'Spinback: every staff command, who ran it and the outcome' },
+  errors: { name: '🚨・bot-errors', topic: 'Spinback: RCON and bot errors' },
+  status: { name: '📡・server-status', topic: 'Spinback: connects, disconnects and setup changes' },
+};
+
+export const CATEGORY_PRESET = { name: '🎧 Spinback' };
 
 export function tierById(id) {
   return TIERS.find((tier) => tier.id === id) ?? null;

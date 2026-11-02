@@ -6,7 +6,6 @@ import { emptyGuildConfig } from '../src/store.js';
 test('every command has a usable slash definition', () => {
   const data = slashCommandData();
   assert.equal(data.length, commands.length);
-  assert.ok(data.length >= 7);
 
   const names = new Set();
   for (const definition of data) {
@@ -16,19 +15,16 @@ test('every command has a usable slash definition', () => {
     names.add(definition.name);
   }
 
-  assert.deepEqual(
-    [...names].sort(),
-    ['ban', 'console', 'kick', 'players', 'pop', 'say', 'setup'],
-  );
+  assert.deepEqual([...names].sort(), ['ban', 'console', 'help', 'kick', 'players', 'pop', 'say', 'setup', 'status']);
 });
 
-test('setup is owner only and slash only, staff commands need a tier', () => {
+test('setup is owner only and slash only, and staff commands need a tier', () => {
   const setup = commandByName('setup');
   assert.equal(setup.ownerOnly, true);
   assert.equal(setup.slashOnly, true);
   assert.equal(setup.minTier, null);
 
-  assert.equal(commandByName('pop').minTier, null);
+  for (const name of ['pop', 'status', 'help']) assert.equal(commandByName(name).minTier, null, name + ' is for everyone');
   assert.equal(commandByName('players').minTier, 'moderator');
   assert.equal(commandByName('say').minTier, 'admin');
   assert.equal(commandByName('kick').minTier, 'admin');
@@ -38,6 +34,13 @@ test('setup is owner only and slash only, staff commands need a tier', () => {
   for (const command of commands) assert.equal(typeof command.run, 'function');
   assert.equal(commandByName('POP').name, 'pop');
   assert.equal(commandByName('nope'), null);
+});
+
+test('prefix usage is documented for the message commands', () => {
+  for (const name of ['pop', 'status', 'help', 'players', 'say', 'kick', 'ban', 'console']) {
+    assert.match(commandByName(name).prefixUsage, /^!/, name + ' needs a !usage line');
+  }
+  assert.equal(commandByName('setup').prefixUsage, undefined, 'setup is slash only');
 });
 
 test('readOptions understands slash interactions', () => {
