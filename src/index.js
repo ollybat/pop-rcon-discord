@@ -525,6 +525,10 @@ function onReady() {
 async function main() {
   logger.info(BRAND.tagline + ' is online as ' + client.user.tag);
 
+  if (dms.enabled) {
+    logger.info('[dm] direct messages on: answer the sender, pass it to the owners, reply with ' + config.discord.prefix + 'reply');
+  }
+
   await health.start().catch((error) => logger.warn('[web] could not listen on port ' + config.web.port + ': ' + error.message));
 
   const ids = new Set([...client.guilds.cache.keys(), ...store.listGuildIds()]);
