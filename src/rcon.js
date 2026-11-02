@@ -77,8 +77,8 @@ export class RustRconClient extends EventEmitter {
         else this.logger.warn('[rcon] socket error: ' + error.message);
       });
 
-      socket.on('message', (data) => this.handleMessage(data));
-      socket.on('close', (code, reason) => this.handleClose(code, reason));
+      socket.on('message', (data) => this.handleMessage(data, socket));
+      socket.on('close', (code, reason) => this.handleClose(code, reason, socket));
     });
 
     try {
@@ -160,7 +160,10 @@ export class RustRconClient extends EventEmitter {
     });
   }
 
-  handleMessage(data) {
+  handleMessage(data, socket = this.socket) {
+    // A socket that has already been replaced by a newer one must never resolve commands.
+    if (socket !== this.socket) return;
+
     let payload;
     try {
       payload = JSON.parse(data.toString());
@@ -188,7 +191,9 @@ export class RustRconClient extends EventEmitter {
     }
   }
 
-  handleClose(code, reason) {
+  handleClose(code, reason, socket = this.socket) {
+    if (socket !== this.socket) return;
+
     const detail = reason ? reason.toString() : '';
     const suffix = detail ? ': ' + detail : '';
     this.logger.warn('[rcon] disconnected from ' + this.target + ' (code ' + code + suffix + ')');
