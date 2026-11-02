@@ -186,7 +186,7 @@ export async function dispatch(command, ctx) {
 export function deniedEmbed(command, gate) {
   const embed = baseEmbed({ color: COLORS.danger })
     .setTitle('⛔ Not allowed')
-    .setDescription(gate.reason ?? 'You do not have the role for this command.');
+    .setDescription((gate.reason ?? 'You do not have the role for this command.') + '\n\n-# Roles are configured with /setup.');
 
   if (command.minTier) {
     embed.addFields({
@@ -198,6 +198,5 @@ export function deniedEmbed(command, gate) {
     });
   }
 
-  embed.setFooter({ text: 'Roles are configured with /setup' });
   return embed;
 }

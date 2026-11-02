@@ -78,6 +78,14 @@ export function popPayload({ snapshots = [], config = null, showPlayers = true, 
         onlineServers: online.length,
         totalServers: shown.length,
         pollSeconds,
+        servers: shown.map((snapshot) => ({
+          slot: snapshot.slot,
+          name: snapshot.name,
+          connected: Boolean(snapshot.connected),
+          restarting: Boolean(snapshot.info?.restarting),
+          players: snapshot.info?.players ?? 0,
+          max: snapshot.info?.max ?? 0,
+        })),
       }),
     );
   }

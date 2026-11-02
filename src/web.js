@@ -1,7 +1,28 @@
+import { readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { BRAND } from './theme.js';
+import { BRAND, BRAND_LOGO } from './theme.js';
 
 const JSON_HEADERS = { 'content-type': 'application/json; charset=utf-8' };
+const PNG_HEADERS = { 'content-type': 'image/png', 'cache-control': 'public, max-age=86400' };
+
+let logoCache;
+
+/**
+ * The Spinback mark. It lives in the repository as base64 text (assets/spinback-logo.b64) so the
+ * source stays plain text, and is decoded once, on the first request.
+ */
+export function brandLogo() {
+  if (logoCache !== undefined) return logoCache;
+
+  try {
+    const encoded = readFileSync(new URL('../assets/spinback-logo.b64', import.meta.url), 'utf8');
+    logoCache = Buffer.from(encoded.replace(/\s+/g, ''), 'base64');
+  } catch {
+    logoCache = null;
+  }
+
+  return logoCache;
+}
 const TEXT_HEADERS = { 'content-type': 'text/plain; charset=utf-8' };
 
 /**
@@ -18,6 +39,18 @@ export function createHealthServer({ logger = null, port = 0, host = '0.0.0.0', 
   const handler = (request, response) => {
     const path = (request.url ?? '/').split('?')[0];
 
+    if (path === '/logo.png' || path === '/logo' || path === '/favicon.ico') {
+      const logo = brandLogo();
+      if (!logo) {
+        response.writeHead(404, JSON_HEADERS);
+        response.end(JSON.stringify({ ok: false, error: 'no logo bundled' }));
+        return;
+      }
+      response.writeHead(200, PNG_HEADERS);
+      response.end(logo);
+      return;
+    }
+
     if (path === '/ping') {
       response.writeHead(200, TEXT_HEADERS);
       response.end('pong');
@@ -27,7 +60,7 @@ export function createHealthServer({ logger = null, port = 0, host = '0.0.0.0', 
     if (path === '/' || path === '/health' || path === '/status' || path === '/healthz') {
       let payload;
       try {
-        payload = { ok: true, service: BRAND.name, version: BRAND.version, ...status() };
+        payload = { ok: true, service: BRAND.name, version: BRAND.version, logo: BRAND_LOGO, ...status() };
       } catch (error) {
         payload = { ok: false, service: BRAND.name, error: error.message };
       }

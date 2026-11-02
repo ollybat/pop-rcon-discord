@@ -4,7 +4,8 @@ export const BRAND = {
   tagline: 'Spinback pop bot',
   serverDefault: 'Spinback 5X EU',
   clan: 'Spinback clan',
-  version: '0.6.3',
+  footer: 'Powered by Spinback',
+  version: '0.6.4',
 };
 
 /** Light blue is the brand colour; the rest stay semantic so status is still readable. */
@@ -151,6 +152,16 @@ export function logKindById(id) {
   return LOG_KINDS.find((kind) => kind.id === id) ?? null;
 }
 
-export function footerText(extra) {
-  return extra ? BRAND.name + ' • ' + extra : BRAND.tagline;
+/** The one footer every embed wears: the brand line, nothing else. */
+export function footerText() {
+  return BRAND.footer;
 }
+
+/**
+ * The Spinback mark, served by the bot's own health endpoint (see web.js). Set PUBLIC_URL to the
+ * address your host proxies and every embed gets the logo; without it the embeds stay text-only.
+ */
+export const BRAND_LOGO = (() => {
+  const url = String(process.env.PUBLIC_URL ?? '').trim().replace(/\/+$/, '');
+  return url ? url + '/logo.png' : null;
+})();

@@ -52,6 +52,11 @@ export function normalizeServerInfo(data) {
     uptime: toNumber(data.Uptime),
     restarting: data.Restarting === true,
     hostname: String(data.Server ?? data.Hostname ?? 'Rust server'),
+    // Rust reports these too; they make /pop and /ping far more interesting.
+    map: data.Map ? String(data.Map) : null,
+    framerate: toNumber(data.Framerate),
+    entityCount: toNumber(data.EntityCount),
+    memory: toNumber(data.Memory),
   };
 }
 
@@ -70,8 +75,13 @@ export function aggregateInfos(snapshots) {
       restarting: total.restarting && snapshot.info.restarting,
       hostname: online.length === 1 ? snapshot.info.hostname : online.length + ' servers',
       servers: online.length,
+      // A map only makes sense for a single server, so it stays null when several are summed.
+      map: online.length === 1 ? snapshot.info.map ?? null : null,
+      framerate: null,
+      entityCount: total.entityCount + (snapshot.info.entityCount ?? 0),
+      memory: total.memory + (snapshot.info.memory ?? 0),
     }),
-    { players: 0, max: 0, queued: 0, joining: 0, uptime: null, restarting: true, hostname: null, servers: 0 },
+    { players: 0, max: 0, queued: 0, joining: 0, uptime: null, restarting: true, hostname: null, servers: 0, map: null, framerate: null, entityCount: 0, memory: 0 },
   );
 }
 
