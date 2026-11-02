@@ -39,25 +39,29 @@ function runUnitTests() {
     return true;
   }
 
-  heading('node --test ' + files.length + ' file(s)');
+  heading('unit tests (' + files.length + ' files)');
   console.log('files: ' + files.join(' '));
 
-  const attempts = [
-    ['--test', ...files],
-    ['--test'],
-    ['--test', 'test'],
-  ];
+  // Preferred: one node --test run. Some hosts wrap node with a script that eats flags, so if
+  // that comes back broken, fall back to running each file in its own process - which is what
+  // node --test does internally anyway.
+  const together = spawnSync(node, ['--test', ...files], { cwd: root, stdio: 'inherit' });
+  if (together.status === 0) return true;
 
-  for (const args of attempts) {
-    const result = spawnSync(node, args, { cwd: root, stdio: 'inherit' });
-    if (result.status === 0) {
-      console.log('unit tests passed with: node ' + args.join(' '));
-      return true;
+  console.log('node --test exited with ' + together.status + ', running each file on its own instead');
+
+  let failed = 0;
+  for (const file of files) {
+    console.log('\n--- ' + file + ' ---');
+    const result = spawnSync(node, [file], { cwd: root, stdio: 'inherit' });
+    if (result.status !== 0) {
+      failed += 1;
+      console.log('FAILED: ' + file + ' (exit ' + result.status + ')');
     }
-    console.log('node ' + args.join(' ') + ' exited with ' + result.status + ' - trying the next form');
   }
 
-  return false;
+  if (failed) console.log('\n' + failed + ' of ' + files.length + ' test file(s) failed');
+  return failed === 0;
 }
 
 /** Start the MCP server, talk a little JSON-RPC to it, and check the answers. */

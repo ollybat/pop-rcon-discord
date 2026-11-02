@@ -70,6 +70,6 @@ test('the toggle button flips the player list', () => {
 
 test('an offline server still gets a red button', () => {
   const rows = popRows({ snapshots: [snapshot(1, 0, false)], focus: null, showPlayers: true });
-  const emoji = rows[0].components.map((button) => button.data.emoji);
+  const emoji = rows[0].components.map((button) => button.data.emoji?.name);
   assert.deepEqual(emoji, ['🔴']);
 });

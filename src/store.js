@@ -170,7 +170,7 @@ export function recordPeak(config, slot, players, at = new Date()) {
 
   const stamp = at instanceof Date ? at.toISOString() : new Date(at).toISOString();
   const count = Math.floor(value);
-  const entry = config.stats[key] ?? { day, peak: count, peakAt: stamp, best: null, days: {} };
+  const entry = config.stats[key] ?? { day: '', peak: 0, peakAt: null, best: null, days: {} };
   entry.days = cleanDays(entry.days);
 
   let changed = false;

@@ -164,7 +164,7 @@ test('normalizeGuildConfig keeps valid stats and drops junk', () => {
   assert.equal(config.stats['1'].peak, 63);
   assert.equal(config.stats['1'].peakAt, '2026-11-02T19:30:00.000Z');
   assert.deepEqual(config.stats['1'].days, { '2026-11-02': 63 }, 'the stored peak seeds the history');
-  assert.equal(config.stats['1'].best, null, 'no best day was stored, and the history has one day');
+  assert.deepEqual(config.stats['1'].best, { peak: 63, day: '2026-11-02', at: null }, 'the best day is derived from the history when it is missing');
   assert.deepEqual(emptyGuildConfig('g').stats, {});
 });
 
