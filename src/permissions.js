@@ -1,4 +1,4 @@
-import { TIERS, tierById, tierRank } from './theme.js';
+import { TIERS, TIER_MATCHERS, tierById, tierRank } from './theme.js';
 
 /** Highest configured tier a member holds, or null when they hold none. */
 export function tierOfMember(member, roles) {
@@ -15,6 +15,41 @@ export function tierOfMember(member, roles) {
   }
 
   return best;
+}
+
+/**
+ * Guess the staff roles from the names already in the server, so nobody has to hand-pick
+ * five roles to get started. Roles that are already set are kept, and Discord's own
+ * integration roles (bots, boosters) are ignored.
+ * Returns { roles, matched, unmatched }.
+ */
+export function matchRolesByName(available, current = {}) {
+  const roles = [...(available?.values?.() ?? available ?? [])].filter(
+    (role) => role && role.id && !role.managed && role.name && role.name !== '@everyone',
+  );
+
+  const result = { ...current };
+  const matched = [];
+  const unmatched = [];
+
+  for (const tier of TIERS) {
+    if (result[tier.id]) continue;
+
+    const wanted = TIER_MATCHERS[tier.id] ?? [];
+    const found = roles
+      .filter((role) => wanted.some((needle) => String(role.name).toLowerCase().includes(needle)))
+      .sort((a, b) => (b.position ?? 0) - (a.position ?? 0))
+      .at(0);
+
+    if (found) {
+      result[tier.id] = found.id;
+      matched.push(tier.id);
+    } else {
+      unmatched.push(tier.id);
+    }
+  }
+
+  return { roles: result, matched, unmatched };
 }
 
 export function isBotOwner(userId, botOwnerIds = []) {
