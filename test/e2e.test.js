@@ -86,6 +86,11 @@ test('the bot follows a Rust server end to end', async (t) => {
 
   await manager.syncGuild('guild-1');
   assert.equal(await waitFor(() => manager.monitorFor('guild-1', 1)?.connected), true, 'the monitor connects to the mock server');
+  assert.equal(
+    await waitFor(() => manager.monitorFor('guild-1', 1)?.seeded === true),
+    true,
+    'the first poll seeds the roster before anything else asks for one',
+  );
 
   const [snapshot] = await manager.refreshGuild('guild-1');
   assert.equal(snapshot.connected, true);
@@ -96,7 +101,18 @@ test('the bot follows a Rust server end to end', async (t) => {
     snapshot.players.map((player) => player.name),
     ['alpha'],
   );
-  assert.equal(changes.length, 0, 'the first poll seeds the roster instead of reporting everyone as a join');
+  const monitor = manager.monitorFor('guild-1', 1);
+  assert.equal(
+    changes.length,
+    0,
+    'the first poll seeds the roster instead of reporting everyone as a join (saw ' +
+      JSON.stringify(changes) +
+      ', seeded=' +
+      monitor.seeded +
+      ', players=' +
+      [...monitor.players.keys()].join(',') +
+      ')',
+  );
 
   roster.push({ SteamID: '2', DisplayName: 'bravo', Ping: 30, ConnectedSeconds: 10 });
   await manager.refreshGuild('guild-1');

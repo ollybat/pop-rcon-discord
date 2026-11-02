@@ -71,8 +71,8 @@ test('the setup panel summarises roles, logs, servers and readiness', () => {
   assert.match(servers.value, /Spinback 5X EU \(1\.2\.3\.4:28016\)/);
   assert.match(servers.value, /Slot 2/);
 
-  const ready = fieldValues(embed).join(' ');
-  assert.match(ready, /Ready/);
+  assert.match(fieldNamed(embed, 'Ready')?.name ?? '', /Ready/);
+  assert.match(fieldValues(embed).join(' '), /at least one server/);
 });
 
 test('the setup panel says what is still missing', () => {
