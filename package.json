@@ -1,6 +1,6 @@
 {
   "name": "pop-rcon-discord",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Discord bot that watches a Rust dedicated server console over WebRCON and shows its live status",
   "type": "module",
@@ -11,6 +11,8 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
+    "check": "node scripts/check.js",
+    "doctor": "node scripts/doctor.js",
     "test": "node --test test/"
   },
   "dependencies": {
