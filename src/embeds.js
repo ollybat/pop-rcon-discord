@@ -449,6 +449,80 @@ export function guideEmbed({ config }) {
     );
 }
 
+/** The automatic answer to anybody who DMs the bot. */
+export function dmAutoReplyEmbed({ user = null, guilds = [], prefix = '!', forwarded = false, help = false } = {}) {
+  const who = user?.username ? '**' + user.username + '**' : 'there';
+
+  const lines = [
+    'Hi ' + who + ' - this is **' + BRAND.name + ' pop bot**. I watch the ' + BRAND.clan +
+      ' Rust servers over WebRCON and report the live population, but I am a bot: I cannot answer questions myself.',
+    '',
+    forwarded
+      ? '🙋 **Your message is on its way to the clan owners.** If it needs an answer, one of them will reply to you here.'
+      : '🔒 I pass messages on for members of the servers I am in. If you play on the ' + BRAND.name +
+        ' Rust servers, send it again from the Discord server so the owners can see who you are.',
+    '',
+    '**Out in the Discord server**',
+    '• \`' + prefix + 'pop\` - who is on the Rust servers right now',
+    '• \`/ping\` - the clan owners can check the bot and every server',
+    '• \`/setup\` - the server owner configures servers, roles and logs',
+  ];
+
+  if (help) lines.push('', '-# Sounds like a question for staff - I have marked it as a help request.');
+
+  return baseEmbed({ color: forwarded ? COLORS.brandSoft : COLORS.muted })
+    .setTitle('👋 ' + BRAND.name + ' support')
+    .setDescription(lines.join('\n'));
+}
+
+/** One DM, passed to the owners. */
+export function dmForwardEmbed({ user = null, guilds = [], text = '', help = false, at = null, prefix = '!' } = {}) {
+  const embed = baseEmbed({ color: help ? COLORS.warning : COLORS.brandSoft })
+    .setTitle((help ? '🙋 Help request from ' : '✉️ New DM from ') + (user?.username ?? 'someone'))
+    .setDescription(truncate(text || '*(no text)*', 2000));
+
+  embed.addFields(
+    { name: '👤 User', value: truncate(user?.username ?? 'unknown', 90), inline: true },
+    { name: '🆔 User ID', value: '\`' + (user?.id ?? 'unknown') + '\`', inline: true },
+    { name: '🕒 Received', value: (at ? clock(at) : clock(new Date())) + ' UTC', inline: true },
+  );
+
+  embed.addFields({
+    name: '🏠 Shared servers',
+    value: guilds.length > 0 ? truncate(guilds.map((guild) => guild.name).join(', '), 300) : 'Not in any server I am in.',
+    inline: false,
+  });
+
+  embed.addFields({
+    name: '↩️ Answer them',
+    value: 'Write \`' + prefix + 'reply ' + (user?.id ?? '<user id>') + ' your answer\` here and I will DM it to them.',
+    inline: false,
+  });
+
+  return embed;
+}
+
+/** An owner answer, delivered to the member who asked. */
+export function dmRelayEmbed({ from = null, text = '' } = {}) {
+  return baseEmbed({ color: COLORS.success })
+    .setTitle('💬 Answer from ' + BRAND.name + ' staff')
+    .setDescription(truncate(text || '*(empty)*', 2000))
+    .addFields({ name: 'From', value: truncate(from?.username ?? 'the owners', 90), inline: true });
+}
+
+/** The small guide an owner sees while relaying, or when a relay cannot happen. */
+export function dmRelayUsageEmbed(prefix = '!', notice = null) {
+  const embed = baseEmbed({ color: notice ? COLORS.warning : COLORS.brandSoft })
+    .setTitle('↩️ Relay an answer')
+    .setDescription(
+      'Write \`' + prefix + 'reply <user id> <your answer>\` here and I will DM it to that member.\n' +
+        'Only the Spinback owners can do this, and only to somebody who has written to me in the last 24 hours.',
+    );
+
+  if (notice) embed.addFields({ name: 'Heads up', value: truncate(notice, 300), inline: false });
+  return embed;
+}
+
 export function welcomeEmbed({ prefix = '!', prefixEnabled = true }) {
   return baseEmbed({ color: COLORS.brandSoft })
     .setTitle('🎧 Thanks for adding ' + BRAND.name + '!')
