@@ -50,13 +50,13 @@ With the default `false` that window shows 🔴 instead.
 That is the design: the wizard needs either the Discord server owner, or a user id listed in
 `BOT_OWNER_IDS`. Ask an owner to run it - they can hand out the staff roles after that.
 
-## A staff command says the member needs a role
+## Someone still sees a staff command that does not exist any more
 
-The command tiers come straight from `/setup`: 🔨 Moderator for `/players`, 🔧 Admin for `/say`
-and `/kick`, ⚔️ Head Admin for `/ban`, 🛡️ Co-Owner for `/console`. Check the roles saved in
-`/setup` → 🎭 Roles, and remember that a member holding several tiers gets the highest one.
+The bot now serves exactly `/setup` and `!pop`. On startup it overwrites the slash command list in
+the guild **and** the global scope, so Discord's own cache is the only thing that can lag: it
+usually clears within an hour, or straight away after a Discord client restart.
 
-## `!pop` does nothing, `/pop` works
+## `!pop` does nothing
 
 Prefix commands need all three of:
 

@@ -4,6 +4,23 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - trimmed to the two commands the clan actually wants
+
+### Changed
+
+- **The bot now serves exactly two commands: `/setup` and `!pop`.** Everything else is gone from
+  both forms: `/pop`, `/status`, `/board`, `/help`, `/players`, `/say`, `/kick`, `/save`,
+  `/ban` and `/console`, plus their `!prefix` twins. The setup panel, the status line, the log
+  channels, the record book (kept in the store and visible as *today's peak* in `!pop`) and the MCP
+  server all stay.
+- **The slash menu can no longer show an entry twice.** On startup the bot overwrites the slash
+  command list in the guild *and* empties the global scope, so a stale global `/setup` cannot sit
+  next to the guild copy. With no `DISCORD_GUILD_ID` it registers the two commands globally and
+  clears the per-guild scope in every server it is in.
+- The five staff roles stay in `/setup` as the bot's record of your clan ranks; no command enforces
+  them any more, so there is nothing to keep in sync by hand.
+- README, SETUP and TROUBLESHOOTING rewritten around the two-command bot.
+
 ## [0.6.0]
 
 A record book, and an MCP server so the same servers can be read without Discord.

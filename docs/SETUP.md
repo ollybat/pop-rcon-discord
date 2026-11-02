@@ -123,7 +123,7 @@ follows the configured roles.
 ## 5. Check it worked
 
 - The bot's name in the member list should show 🟢 RCON┆👥 ... within one poll interval.
-- `/pop` should list the players who are online.
+- `!pop` should list the players who are online.
 - Joining the Rust server should produce a 🚪 embed in your join/leave channel within ~20 seconds.
 
 If not, run `npm run doctor` and read [TROUBLESHOOTING.md](TROUBLESHOOTING.md).

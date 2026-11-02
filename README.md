@@ -2,7 +2,7 @@
 
 A Discord bot for **Rust dedicated servers** (PC / Steam, not Console Edition) that talks to the
 server console over **WebRCON**, shows the live population in its own status line, and gives your
-staff a **/setup** wizard, **/pop** player reports and role-gated staff commands.
+server owner a **/setup** wizard plus one headline command for everybody: **!pop**.
 
 ```
 🟢 RCON┆👥  63/200 ⏳0/2      <- the bot's "Watching" activity, updated every 20 seconds
@@ -15,19 +15,13 @@ staff a **/setup** wizard, **/pop** player reports and role-gated staff commands
   existing roles by name and creates the four log channels for you.
 - **!pop** - who is online right now, with a population bar, queue, uptime, today's peak and the
   player list, right in the channel. The buttons under it switch server, refresh on demand and hide
-  the list. `/pop` does the same thing if you prefer the slash menu.
-- **!status** - is every server reachable, how many players in total, and today's busiest moment.
-- **!help** - every command grouped by the tier it needs.
-- **!board** - the record book: the best day ever, today, and the busiest days this server has
-  seen (peaks are kept per server, per UTC day, for 90 days).
+  the list.
+- **A record book** - the busiest moment of every day is remembered per server, per UTC day, for
+  90 days, and shown in `!pop` as today's peak.
 - **An MCP server** - `mcp/server.js` lets Claude Desktop / Claude Code / Codex read the same
   Rust servers directly, no Discord in the middle. See [docs/MCP.md](docs/MCP.md).
-- **Logs** - join & leave (with session length), every staff command, errors, and server
+- **Logs** - join & leave (with session length), every command, errors, and server
   connects/disconnects.
-- **Staff commands** - /players, /say, /kick, /ban, /console, gated by the roles you picked in
-  /setup.
-- **Daily peaks** - the busiest moment of each day is remembered per server and shown in /pop and
-  /status.
 - **Light blue everywhere** - every embed uses the Spinback palette and footer, and the bot wears
   the name Spinback in your server.
 
@@ -88,35 +82,30 @@ Then run **/setup** in your server - see [docs/SETUP.md](docs/SETUP.md) for the 
 | 🧹 Reset | Wipes every saved role, channel and server for this Discord server |
 
 Only the **Discord server owner** (or a **bot owner** listed in `BOT_OWNER_IDS`) can use `/setup`.
-Every other command follows the roles you saved: a member with the ⚔️ Head Admin role can use
-everything up to Head Admin, and the server owner always can.
+Everyone else only ever needs `!pop`. The five staff roles you pick in the panel are the bot's
+record of your clan ranks (they feed the panel's readiness checklist); there are no role-gated
+commands to keep in sync any more.
 
 ## Commands
 
 | Slash | Prefix | Who | What it does |
 | --- | --- | --- | --- |
 | `/setup` | - | Server owner / bot owner | Opens the setup panel. |
-| `/pop` | **`!pop`** | Everyone | Live population, queue, uptime, today's peak and the player list, with buttons to switch server, refresh and hide the list. `!pop 2` opens on one server, `!pop 2 off` hides the names. |
-| `/status` | **`!status`** | Everyone | Are the servers reachable, how many players in total, and each server's peak of the day. |
-| `/board` | **`!board`** | Everyone | The record book: best day ever, today, and the busiest recorded days. |
-| `/help` | **`!help`** | Everyone | Every command, grouped by who can use it. |
-| `/players` | `!players` | 🔨 Moderator and up | Detailed player list with ping and session time. |
-| `/say` | `!say` | 🔧 Admin and up | Broadcasts a message to in-game global chat. |
-| `/kick` | `!kick` | 🔧 Admin and up | Kicks a player by name or SteamID, with an optional reason. |
-| `/save` | `!save` | 🔧 Admin and up | Asks the Rust server to save the world (`server.save`). |
-| `/ban` | `!ban` | ⚔️ Head Admin and up | Bans a player by name or SteamID, with an optional reason. |
-| `/console` | `!console` | 🛡️ Co-Owner and up | Sends one raw RCON command and shows the reply. |
+| - | **`!pop`** | Everyone | Live population, queue, uptime, today's peak and the player list, with buttons to switch server, refresh and hide the list. `!pop 2` opens on one server, `!pop 2 off` hides the names. |
 
-Slash replies and refusals are private; `!prefix` replies are public, which is what you want for
-`!pop`. `!prefix` commands need `PREFIX_COMMANDS_ENABLED=true` (the default) and the **Message
-Content Intent** enabled in the Discord developer portal.
+That is the whole list. The slash menu only ever holds `/setup` - the bot clears anything else it
+may have registered before, so nothing shows up twice.
+
+`!pop` is public, which is what you want for a population report. It needs
+`PREFIX_COMMANDS_ENABLED=true` (the default) and the **Message Content Intent** enabled in the
+Discord developer portal.
 
 ## What ends up in the log channels
 
 | Channel | Receives |
 | --- | --- |
 | 🚪 Join & Leave | One embed per player, with ping and session length when they leave. A restart-sized change becomes a single summary instead of a wall of messages. |
-| ⌨️ Command Log | Every staff command: who ran it, their tier, the options, how long it took and any error. |
+| ⌨️ Command Log | Every command: who ran it, their tier, the options, how long it took and any error. |
 | 🚨 Error Log | RCON failures, permission problems and unhandled errors. |
 | 📡 Server Status | Connects and disconnects, plus every change made in `/setup`. |
 
@@ -137,7 +126,7 @@ advanced shortcut that pre-fills server slot 1 before the first `/setup`.
 | `RCON_TIMEOUT_MS` | `15000` | How long one RCON command may take. |
 | `RCON_MAX_RECONNECT_DELAY_MS` | `30000` | Ceiling for the reconnect backoff. |
 | `RCON_CHAT_CHANNEL_ID` | - | Optional: mirror in-game chat into this channel. |
-| `POLL_INTERVAL_SECONDS` | `20` | One poll drives the status line, `/pop` and the join/leave logs. Floor is 5. |
+| `POLL_INTERVAL_SECONDS` | `20` | One poll drives the status line, `!pop` and the join/leave logs. Floor is 5. |
 | `DATA_DIR` | `./data` | Where `/setup` settings are stored (one JSON file per server, mode 0600). |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` or `silent`. |
 | `LOG_TIMESTAMPS` | `true` | Prefix log lines with a UTC timestamp. |
@@ -188,7 +177,7 @@ src/
   store.js        per-guild settings from /setup (atomic JSON, mode 0600)
   setup/          the wizard: panel.js builds the components, index.js handles them
   commands.js     every command, in slash and !prefix form, plus the access gate
-  pop.js          the interactive /pop: embeds plus the switch/refresh/toggle buttons
+  pop.js          the interactive !pop: embeds plus the switch/refresh/toggle buttons
 mcp/server.js     the MCP server: the same Rust servers, for AI clients instead of Discord
   embeds.js       every embed, in the light blue theme
   logs.js         routes events into the log channels
