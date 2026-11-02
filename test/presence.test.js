@@ -34,7 +34,17 @@ test('normalizeServerInfo fills in the fields the server omits', () => {
     uptime: null,
     restarting: true,
     hostname: 'POP',
+    map: null,
+    framerate: null,
+    entityCount: null,
+    memory: null,
   });
+
+  const rich = normalizeServerInfo({ Players: 5, MaxPlayers: 100, Map: 'Procedural Map', Framerate: 60, EntityCount: 1234, Memory: 4096 });
+  assert.equal(rich.map, 'Procedural Map');
+  assert.equal(rich.framerate, 60);
+  assert.equal(rich.entityCount, 1234);
+  assert.equal(rich.memory, 4096);
 });
 
 test('presenceFor reports each of the three states', () => {
@@ -75,6 +85,8 @@ test('aggregateInfos adds every online server together', () => {
   assert.equal(infos.joining, 2);
   assert.equal(infos.uptime, 300);
   assert.equal(infos.servers, 2);
+  assert.equal(infos.map, null, 'a summed view has no single map');
+  assert.equal(infos.entityCount, 0);
   assert.equal(aggregateInfos([]), null);
   assert.equal(aggregateInfos([{ connected: false, info: null }]), null);
 });

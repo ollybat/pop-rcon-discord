@@ -31,6 +31,13 @@ server owner a **/setup** wizard plus one headline command for everybody: **!pop
 - **Light blue everywhere** - every embed uses the Spinback palette and footer, and the bot wears
   the name Spinback in your server.
 
+## Branding
+
+Every embed the bot sends ends with **Powered by Spinback** and (once `PUBLIC_URL` is set) carries
+the Spinback mark as its thumbnail, served from the bot itself at `GET /logo.png`. The logo lives in
+the repository as base64 text (`assets/spinback-logo.b64`) so nothing but text is ever committed,
+and it is decoded into memory on the first request.
+
 ## Privacy
 
 Nothing about the setup is public, and nothing secret ever leaves the container:

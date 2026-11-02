@@ -103,5 +103,6 @@ test('deniedEmbed explains which roles are allowed', () => {
   assert.match(embed.data.title, /Not allowed/);
   assert.match(embed.data.description, /no/);
   assert.match(embed.data.fields[0].value, /Admin Role/);
-  assert.match(embed.data.footer.text, /\/setup/);
+  assert.match(embed.data.description, /\/setup/);
+  assert.equal(embed.data.footer.text, 'Powered by Spinback');
 });

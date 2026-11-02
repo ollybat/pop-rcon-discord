@@ -43,13 +43,16 @@ function fieldNamed(embed, name) {
   return (embed.data.fields ?? []).find((field) => field.name.includes(name)) ?? null;
 }
 
-test('baseEmbed carries the light blue brand colour and the footer', () => {
+test('every embed wears the same brand footer', () => {
   const embed = baseEmbed();
   assert.equal(embed.data.color, COLORS.brand);
-  assert.equal(embed.data.footer.text, 'Spinback pop bot');
+  assert.equal(embed.data.footer.text, 'Powered by Spinback');
 
-  const withFooter = baseEmbed({ footer: 'extra' });
-  assert.equal(withFooter.data.footer.text, 'Spinback • extra');
+  for (const other of [baseEmbed({ color: COLORS.danger }), baseEmbed({ color: COLORS.success }), panelEmbed({ guild, config: emptyGuildConfig('g') })]) {
+    assert.equal(other.data.footer.text, 'Powered by Spinback', 'the footer is the brand line and nothing else');
+  }
+
+  assert.equal(baseEmbed({ logo: false }).data.thumbnail, undefined, 'the mark is opt-out');
 });
 
 test('the setup panel summarises roles, logs, servers and readiness', () => {
@@ -139,7 +142,8 @@ test('popServerEmbed covers online, offline and unresponsive servers', () => {
 
   assert.equal(online.data.color, STATUS.online.color);
   assert.match(online.data.title, /12\/100/);
-  assert.match(online.data.footer.text, /RCON 9ms/);
+  assert.match(fieldNamed(online, 'RCON').value, /9 ms/);
+  assert.match(online.data.description ?? '', /^$/);
   assert.ok(fieldNamed(online, 'Population'));
   assert.match(fieldNamed(online, 'Players').value, /alpha/);
 
@@ -173,7 +177,9 @@ test('join and leave embeds, including the restart-sized summary', () => {
   const join = joinLeaveEmbed({ type: 'join', player: { id: '1', name: 'alpha' }, server, online: 5, max: 100 });
   assert.equal(join.data.color, COLORS.success);
   assert.match(join.data.title, /alpha/);
-  assert.match(join.data.footer.text, /5\/100 online/);
+  assert.equal(join.data.author.name, 'Spinback 5X EU');
+  assert.match(join.data.description, /5\/100 online/);
+  assert.equal(join.data.footer.text, 'Powered by Spinback');
 
   const leave = joinLeaveEmbed({ type: 'leave', player: { id: '1', name: 'alpha' }, server, online: 4, max: 100, sessionSeconds: 3700 });
   assert.equal(leave.data.color, COLORS.warning);
@@ -182,6 +188,61 @@ test('join and leave embeds, including the restart-sized summary', () => {
   const mass = joinLeaveEmbed({ type: 'join', player: { name: '', id: '' }, server, online: 0, max: 100, massChange: true, joinedCount: 12, leftCount: 11 });
   assert.equal(mass.data.color, COLORS.warning);
   assert.match(mass.data.description, /12 joined and 11 left/);
+});
+
+
+test('!pop shows the details Rust actually reports', () => {
+  const snapshot = {
+    slot: 1,
+    name: 'Spinback 5X EU',
+    connected: true,
+    info: {
+      players: 42,
+      max: 100,
+      queued: 3,
+      joining: 1,
+      uptime: 7200,
+      restarting: false,
+      hostname: 'Spinback 5X EU',
+      map: 'Procedural Map',
+      framerate: 60,
+      entityCount: 12345,
+    },
+    players: [{ id: '1', name: 'alpha', ping: 25, seconds: 120 }],
+    latencyMs: 9,
+    at: new Date().toISOString(),
+  };
+
+  const embed = popServerEmbed(snapshot, { peak: '**63/100** at 18:42 UTC' });
+
+  assert.match(embed.data.title, /42\/100 online/);
+  assert.match(fieldNamed(embed, 'Population').value, /42\/100/);
+  assert.match(fieldNamed(embed, 'Population').value, /\(42%\)/);
+  assert.match(fieldNamed(embed, 'Queue').value, /3 queued • 1 joining/);
+  assert.match(fieldNamed(embed, 'Uptime').value, /2h/);
+  assert.match(fieldNamed(embed, 'Map').value, /Procedural Map/);
+  assert.match(fieldNamed(embed, 'FPS').value, /60/);
+  assert.match(fieldNamed(embed, 'Entities').value, /12345/);
+  assert.match(fieldNamed(embed, 'Peak today').value, /63\/100/);
+  assert.equal(embed.data.footer.text, 'Powered by Spinback');
+
+  const network = popSummaryEmbed({
+    totalPlayers: 52,
+    totalMax: 300,
+    onlineServers: 2,
+    totalServers: 3,
+    pollSeconds: 20,
+    servers: [
+      { slot: 1, name: 'Spinback 5X EU', connected: true, players: 42, max: 100 },
+      { slot: 2, name: 'Second', connected: false, players: 0, max: 200 },
+    ],
+  });
+
+  assert.match(network.data.description, /52\/300/);
+  assert.match(network.data.description, /\(17%\)/);
+  assert.match(network.data.description, /refreshed every 20s/);
+  assert.match(fieldNamed(network, 'Spinback 5X EU').value, /42\/100/);
+  assert.match(fieldNamed(network, 'Second').value, /offline/);
 });
 
 test('the command log records who did what, with which tier', () => {
@@ -276,8 +337,7 @@ test('pingEmbed reports the gateway, the servers and the public URL', () => {
   assert.match(fieldNamed(embed, 'RCON').value, /ECONNREFUSED/);
   assert.match(fieldNamed(embed, 'Public URL').value, /200 OK/);
   assert.match(fieldNamed(embed, 'Public URL').value, /nyksp9z6p1/);
-  assert.match(embed.data.footer.text, /Private/);
-  assert.doesNotMatch(embed.data.footer.text, /public/i);
+  assert.equal(embed.data.footer.text, 'Powered by Spinback');
 
   const offline = pingEmbed({ snapshots: [], health: { url: 'http://x', ok: false, status: null, ms: 4000, error: 'timed out after 4000ms' } });
   assert.match(fieldNamed(offline, 'RCON').value, /\/setup/);
@@ -299,7 +359,7 @@ test('the setup panel is private and never renders the RCON password', () => {
   const panel = panelEmbed({ guild, config });
   const rendered = JSON.stringify(panel.data);
 
-  assert.match(panel.data.footer.text, /Private/);
+  assert.equal(panel.data.footer.text, 'Powered by Spinback');
   assert.match(panel.data.description, /Nothing here is public/);
   assert.ok(!rendered.includes('hunter2'), 'the raw password must never be rendered');
   assert.match(panel.data.fields[2].value, /1\.2\.3\.4:28016/, 'the owner still sees the address');
@@ -333,7 +393,7 @@ test('guideEmbed shows the exact Rust start line', () => {
   assert.match(embed.data.description, /\+rcon\.web 1/);
   assert.match(embed.data.description, /rcon\.port 28016/);
   assert.match(embed.data.description, /Guess roles/);
-  assert.match(embed.data.footer.text, /Console Edition/);
+  assert.match(embed.data.description, /Console Edition/);
 });
 
 test('welcomeEmbed tells a new server owner what to do first', () => {

@@ -4,6 +4,26 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.4] - one brand line everywhere, and a lot more in every answer
+
+### Changed
+
+- **Every embed now ends with the same line: `Powered by Spinback`.** The old per-embed footers
+  (server names, guild names, latency, "🔒 Private — …", "Console Edition has no RCON") are gone; the
+  information they carried moved into the embed body, where it is easier to read.
+- **The Spinback mark rides along.** A `PUBLIC_URL` now also means every embed gets the logo as its
+  thumbnail, served by the bot itself at `GET /logo.png`. The image is stored in the repository as
+  base64 text (`assets/spinback-logo.b64`) so the source stays plain text, and decoded once in memory.
+- **`/pop` is much richer**: population bar with a percentage, queue, uptime, RCON round-trip with
+  the time of the reading, the map name, the server's frame rate and entity count, today's peak, and
+  the roster. The network summary now lists every server on its own line with its own player count.
+- **`serverinfo` now keeps `Map`, `Framerate`, `EntityCount` and `Memory`**, so the bot (and the MCP
+  server, which reports them too) has something to show beyond the player count.
+- Join and leave logs use the server as the embed author and put the session length in bold; the
+  command log shows which server it happened in; error logs name their source in the title.
+- The `/setup` panel, the guide and the welcome message lost their footer text but kept every word
+  of the privacy and Console Edition notes - in the body.
+
 ## [0.6.3] - private setup, better commands
 
 ### Added
