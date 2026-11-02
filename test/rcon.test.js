@@ -1,26 +1,10 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { test } from 'node:test';
-import { WebSocketServer } from 'ws';
 import { RustRconClient } from '../src/rcon.js';
+import { startMockRconServer } from './helpers/mock-rcon-server.js';
 
 const silentLogger = { info() {}, warn() {}, error() {} };
-
-async function startFakeServer(onConnection) {
-  const wss = new WebSocketServer({ port: 0 });
-  await new Promise((resolve) => wss.once('listening', resolve));
-
-  const port = wss.address().port;
-  wss.on('connection', (socket, request) => onConnection(socket, request));
-
-  return {
-    port,
-    close: () => {
-      for (const socket of wss.clients) socket.terminate();
-      return new Promise((resolve) => wss.close(resolve));
-    },
-  };
-}
 
 function clientFor(server, overrides = {}) {
   return new RustRconClient({
@@ -35,24 +19,20 @@ function clientFor(server, overrides = {}) {
 }
 
 test('authenticates with the password in the URL path', async (t) => {
-  const seen = {};
-  const server = await startFakeServer((socket, request) => {
-    seen.url = request.url;
-  });
+  const server = await startMockRconServer();
   t.after(() => server.close());
 
   const client = clientFor(server);
   t.after(() => client.close());
   await client.connect();
 
-  assert.equal(seen.url, '/hunter2');
+  assert.equal(server.state.paths[0], '/hunter2');
   assert.equal(client.connected, true);
 });
 
 test('resolves a command reply by identifier', async (t) => {
-  const server = await startFakeServer((socket) => {
-    socket.on('message', (raw) => {
-      const frame = JSON.parse(raw.toString());
+  const server = await startMockRconServer({
+    onCommand(frame, socket) {
       socket.send(
         JSON.stringify({
           Identifier: frame.Identifier,
@@ -61,7 +41,7 @@ test('resolves a command reply by identifier', async (t) => {
           Stacktrace: null,
         }),
       );
-    });
+    },
   });
   t.after(() => server.close());
 
@@ -72,12 +52,12 @@ test('resolves a command reply by identifier', async (t) => {
   const response = await client.send('server.info');
   assert.equal(response.message, 'echo:server.info');
   assert.equal(response.type, 'Generic');
+  assert.equal(server.state.requests[0].Name, 'WebRcon');
 });
 
 test('sendJson parses JSON replies and falls back to null', async (t) => {
-  const server = await startFakeServer((socket) => {
-    socket.on('message', (raw) => {
-      const frame = JSON.parse(raw.toString());
+  const server = await startMockRconServer({
+    onCommand(frame, socket) {
       const isList = frame.Message === 'playerlist';
       socket.send(
         JSON.stringify({
@@ -87,7 +67,7 @@ test('sendJson parses JSON replies and falls back to null', async (t) => {
           Stacktrace: null,
         }),
       );
-    });
+    },
   });
   t.after(() => server.close());
 
@@ -104,11 +84,7 @@ test('sendJson parses JSON replies and falls back to null', async (t) => {
 });
 
 test('emits chat broadcasts that carry no identifier', async (t) => {
-  const server = await startFakeServer((socket) => {
-    socket.send(
-      JSON.stringify({ Identifier: 0, Message: 'hello world', Type: 'Chat', Stacktrace: null, Username: 'olly' }),
-    );
-  });
+  const server = await startMockRconServer();
   t.after(() => server.close());
 
   const client = clientFor(server);
@@ -116,14 +92,23 @@ test('emits chat broadcasts that carry no identifier', async (t) => {
 
   const chatPromise = once(client, 'chat');
   await client.connect();
-  const [chat] = await chatPromise;
 
+  server.broadcast({
+    Identifier: 0,
+    Message: 'hello world',
+    Type: 'Chat',
+    Stacktrace: null,
+    Username: 'olly',
+    Channel: 'global',
+  });
+
+  const [chat] = await chatPromise;
   assert.equal(chat.message, 'hello world');
   assert.equal(chat.raw.Username, 'olly');
 });
 
 test('rejects when a command times out', async (t) => {
-  const server = await startFakeServer(() => {});
+  const server = await startMockRconServer({ onCommand() {} });
   t.after(() => server.close());
 
   const client = clientFor(server, { timeoutMs: 150 });
@@ -134,6 +119,44 @@ test('rejects when a command times out', async (t) => {
 });
 
 test('rejects commands while disconnected', async () => {
-  const client = new RustRconClient({ host: '127.0.0.1', port: 1, password: 'x', autoReconnect: false, logger: silentLogger });
+  const client = new RustRconClient({
+    host: '127.0.0.1',
+    port: 1,
+    password: 'x',
+    autoReconnect: false,
+    logger: silentLogger,
+  });
+
   await assert.rejects(() => client.send('server.info'), /Not connected/);
+});
+
+test('reconnects on its own after the server drops the connection', async (t) => {
+  const server = await startMockRconServer();
+  t.after(() => server.close());
+
+  const client = clientFor(server, { autoReconnect: true, maxReconnectDelayMs: 250 });
+  t.after(() => client.close());
+  await client.connect();
+
+  const dropped = once(client, 'disconnected');
+  const back = once(client, 'connected');
+
+  server.dropAll();
+  await dropped;
+  await back;
+
+  assert.equal(client.connected, true);
+  assert.equal(server.state.connections, 2);
+});
+
+test('close() stops the reconnect loop', async (t) => {
+  const server = await startMockRconServer();
+  t.after(() => server.close());
+
+  const client = clientFor(server, { autoReconnect: true, maxReconnectDelayMs: 100 });
+  await client.connect();
+  await client.close();
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  assert.equal(server.state.connections, 1, 'a closed client must not dial again');
 });
