@@ -7,7 +7,7 @@ import { ChannelRelay } from './relay.js';
 import { PresenceManager, aggregateInfos } from './presence.js';
 import { ServerManager } from './servers.js';
 import { commandByName, defaultSlot, describeOptions, dispatch, readOptions, slashCommandData } from './commands.js';
-import { errorEmbed, welcomeEmbed } from './embeds.js';
+import { errorEmbed, hintEmbed, welcomeEmbed } from './embeds.js';
 import { handlePopComponent } from './pop.js';
 import { handleSetupComponent, handleSetupModal } from './setup/index.js';
 import { parsePrefixCommand } from './prefix.js';
@@ -298,7 +298,23 @@ client.on('messageCreate', async (message) => {
     if (!parsed) return;
 
     const command = commandByName(parsed.name);
-    if (!command || command.slashOnly) return;
+    if (!command) return;
+
+    // /setup only exists as a slash command: say so instead of staying silent.
+    if (command.slashOnly) {
+      await message
+        .reply({
+          embeds: [
+            hintEmbed(
+              'Use the slash version',
+              '**/setup** is a slash command — start typing `/setup` and pick it from the menu.\n' +
+                'Everything else works with `' + config.discord.prefix + 'pop`, `' + config.discord.prefix + 'status` and `' + config.discord.prefix + 'help`.',
+            ),
+          ],
+        })
+        .catch(() => {});
+      return;
+    }
 
     if (!store.has(message.guild.id)) await store.load(message.guild.id);
     await runCommand(command, {
