@@ -3,6 +3,7 @@ import { COLORS, TIERS, tierById } from './theme.js';
 import { baseEmbed } from './embeds.js';
 import { popPayload, popPlaceholder } from './pop.js';
 import { canRun } from './permissions.js';
+import { effectiveServers } from './servers.js';
 
 /**
  * The bot serves exactly two commands.
