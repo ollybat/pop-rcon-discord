@@ -4,6 +4,34 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - direct messages: answer the sender, ask the owners
+
+### Added
+
+- **Direct messages are handled now.** Whoever DMs the bot gets a branded answer: who it is,
+  that the owners have been told, and the three things worth knowing (`!pop`, `/ping`, `/setup`).
+- **The message is passed to the owner instead of being lost.** It arrives as a DM to every owner
+  of the servers you share with the sender, plus `BOT_OWNER_IDS` and `DM_FORWARD_IDS`, and as a
+  copy in the command log channel when one is configured.
+- **`!reply <user id> <your answer>`** lets an owner answer from their own DMs; the bot delivers it
+  to the member. It only works for people who wrote in during the last 24 hours.
+- New embeds: `dmAutoReplyEmbed`, `dmForwardEmbed`, `dmRelayEmbed`, `dmRelayUsageEmbed` - all with
+  the `Powered by Spinback` footer and the logo.
+- The forward embed says whether it reads like a question (title *🙋 Help request from ...*) or is
+  just a message (*✉️ New DM from ...*), with the sender, their id, shared servers and the time.
+- New settings: `DM_ENABLED`, `DM_FORWARD_IDS`, `DM_FORWARD_STRANGERS`, `DM_REPLY_COOLDOWN_SECONDS`.
+
+### Changed
+
+- The bot asks for the **Direct Messages** intent (and keeps Message Content) whenever
+  `DM_ENABLED` or prefix commands are on.
+- Slash commands used in a DM now answer with a hint to use them inside the server.
+
+### Fixed
+
+- A DM, an empty message or an attachment on its own can no longer fall through the message
+  handler unnoticed.
+
 ## [0.6.4] - one brand line everywhere, and a lot more in every answer
 
 ### Changed

@@ -126,6 +126,7 @@ commands to keep in sync any more.
 | `/setup` | - | Server owner / bot owner | Opens the setup panel. |
 | `/ping` | **`!ping`** | 👑 Owner / 🛡️ Co-Owner | Health check: Discord gateway ping, every server's RCON round-trip and player count, uptime, build, and your public URL's answer. |
 | - | **`!pop`** | Everyone | Live population, queue, uptime, today's peak and the player list, with buttons to switch server, refresh and hide the list. `!pop 2` opens on one server, `!pop 2 off` hides the names. |
+| - | **`!reply`** (in a DM) | 👑 Owner / 🛡️ Co-Owner | Answers somebody who DM'd the bot: `!reply <user id> <your answer>`. Only works for people who wrote in the last 24 hours. |
 
 That is the whole list. The slash menu only ever holds `/setup` - the bot clears anything else it
 may have registered before, so nothing shows up twice.
@@ -133,6 +134,28 @@ may have registered before, so nothing shows up twice.
 `!pop` is public, which is what you want for a population report. It needs
 `PREFIX_COMMANDS_ENABLED=true` (the default) and the **Message Content Intent** enabled in the
 Discord developer portal.
+
+## Direct messages
+
+Somebody who DMs the bot is answered with a short note saying who the bot is, that the clan
+owners have been told, and what to use in the server (`!pop`, `/ping`, `/setup`). The message
+itself goes to the people who can act on it:
+
+- a **DM to every owner** of the servers you share with the sender, plus `BOT_OWNER_IDS` and
+  `DM_FORWARD_IDS` - so nothing waits for somebody to log in;
+- a copy in the **command log channel**, when `/setup` set one, so the rest of staff see it;
+- an embed titled **🙋 Help request from ...** when the message reads like a question
+  (help/ban/whitelist/offline/...), otherwise **✉️ New DM from ...**.
+
+The embed carries the sender's username and id, which servers you share, the time, and a ready
+line to answer: `!reply <user id> <your answer>`. The bot then DMs your answer to them - it only
+does this for people who actually wrote in (24 hours), so nobody can aim the bot at strangers.
+
+Guards: one automatic answer per person per `DM_REPLY_COOLDOWN_SECONDS` (5 minutes by default),
+at most 10 forwarded messages per person per 15 minutes, long messages shortened, and secrets
+scrubbed out of the text. People who are in none of your servers only get the answer - set
+`DM_FORWARD_STRANGERS=true` if you want those too. Slash commands in a DM are refused with a
+pointer to the server instead of failing silently.
 
 ## What ends up in the log channels
 
