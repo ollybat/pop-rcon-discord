@@ -1,54 +1,374 @@
-import { Client, Events, GatewayIntentBits } from 'discord.js';
-import { config } from './config.js';
+import { Client, GatewayIntentBits, MessageFlags, Partials } from 'discord.js';
+import { config, presenceSlot } from './config.js';
 import { createLogger } from './logger.js';
-import { PresenceManager } from './presence.js';
-import { RustRconClient } from './rcon.js';
+import { GuildStore, configuredServers } from './store.js';
+import { LogRouter } from './logs.js';
 import { ChannelRelay } from './relay.js';
+import { PresenceManager, aggregateInfos } from './presence.js';
+import { ServerManager } from './servers.js';
+import { commandByName, defaultSlot, describeOptions, dispatch, readOptions, slashCommandData } from './commands.js';
+import { errorEmbed } from './embeds.js';
+import { handleSetupComponent, handleSetupModal } from './setup/index.js';
+import { parsePrefixCommand } from './prefix.js';
+import { BRAND, COLORS } from './theme.js';
 
 const logger = createLogger({ level: config.log.level, timestamps: config.log.timestamps });
-const rcon = new RustRconClient({ ...config.rcon, logger });
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-const relay = new ChannelRelay({ client, channelId: config.discord.consoleChannelId, logger });
-const presence = new PresenceManager({ client, rcon, options: config.presence, logger });
 
-/** Relay calls are fire-and-forget: never let one take the bot down. */
-const fire = (result) => {
-  Promise.resolve(result).catch((error) => logger.warn('[relay] ' + error.message));
-};
+const intents = [GatewayIntentBits.Guilds];
+if (config.discord.prefixCommandsEnabled) {
+  // Only needed for the !prefix commands in the .env config.
+  intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
+}
 
-rcon.on('connected', () => fire(relay.rconConnected(rcon.target)));
-rcon.on('disconnected', (info) => fire(relay.rconDisconnected(info)));
-rcon.on('chat', (payload) => fire(relay.chat(payload)));
-rcon.on('error', (error) => logger.warn('[rcon] ' + error.message));
+const client = new Client({ intents, partials: [Partials.Channel] });
 
-client.once(Events.ClientReady, async (ready) => {
-  const relayNote = relay.enabled ? 'relaying to ' + relay.channelId : 'relay disabled';
-  logger.info('[discord] logged in as ' + ready.user.tag + ' - ' + relayNote);
-  await presence.start();
+const store = new GuildStore({ dir: config.data.dir, logger });
+const logs = new LogRouter({ client, store, logger });
+
+const relay = new ChannelRelay({ client, channelId: config.log.chatChannelId, logger });
+
+const servers = new ServerManager({
+  store,
+  logger,
+  pollIntervalSeconds: config.poll.intervalSeconds,
+  envServer: config.rcon.fromEnv,
+  onChat: (guildId, event) => relay.chat(event),
+  onChanges: (guildId, changes) => reportChanges(guildId, changes),
+  onStatus: (guildId, status) => reportStatus(guildId, status),
+  onError: (guildId, error) =>
+    logs.error(guildId, {
+      source: 'RCON ' + (error.server ? error.server.name : 'client'),
+      message: error.message,
+      context: error.source,
+    }),
 });
+
+const presence = new PresenceManager({
+  client,
+  logger,
+  options: {
+    enabled: config.presence.enabled,
+    intervalSeconds: config.poll.intervalSeconds,
+    restingOnReconnect: config.presence.restingOnReconnect,
+    formats: {
+      online: config.presence.formats.online,
+      offline: config.presence.formats.offline,
+      resting: config.presence.formats.resting,
+    },
+  },
+  provider: presenceProvider,
+});
+
+function reportChanges(guildId, changes) {
+  const base = {
+    server: changes.server,
+    online: changes.online,
+    max: changes.max,
+    joinedCount: changes.joinedCount,
+    leftCount: changes.leftCount,
+  };
+
+  if (changes.massChange) {
+    logs.joinLeave(guildId, { ...base, type: 'join', player: { name: '', id: '' }, massChange: true });
+    return;
+  }
+
+  for (const player of changes.joined) logs.joinLeave(guildId, { ...base, type: 'join', player });
+  for (const player of changes.left) logs.joinLeave(guildId, { ...base, type: 'leave', player, sessionSeconds: player.sessionSeconds });
+}
+
+function reportStatus(guildId, status) {
+  if (status.type === 'connected') {
+    logs.status(guildId, {
+      title: '📡 ' + status.server.name + ' is connected',
+      description: 'RCON session established with ' + status.server.host + ':' + status.server.port + '.',
+      color: COLORS.success,
+    });
+    return;
+  }
+
+  logs.status(guildId, {
+    title: '📴 ' + status.server.name + ' disconnected',
+    description: 'The RCON session dropped' + (status.reason ? ' (' + status.reason + ')' : '') + '. Reconnecting automatically.',
+    color: COLORS.warning,
+  });
+}
+
+/** The guild whose servers drive the bot's activity. */
+function presenceGuildId() {
+  if (config.presence.guildId && client.guilds.cache.has(config.presence.guildId)) return config.presence.guildId;
+
+  for (const id of store.listGuildIds()) {
+    if (client.guilds.cache.has(id) && configuredServers(store.get(id)).length > 0) return id;
+  }
+
+  const first = client.guilds.cache.first();
+  return first ? first.id : null;
+}
+
+/** Reads the latest snapshots; the per-server timers keep them fresh. */
+async function presenceProvider() {
+  const guildId = presenceGuildId();
+  if (!guildId) return { connected: false, reconnecting: false, info: null };
+
+  await servers.syncGuild(guildId);
+  const monitors = servers.list(guildId);
+  const wanted = presenceSlot(config.presence.serverSlot);
+  const targets = wanted === 'all' ? monitors : monitors.filter((monitor) => monitor.slot === wanted);
+
+  if (targets.length === 0) return { connected: false, reconnecting: false, info: null };
+
+  const snapshots = targets.map((monitor) => monitor.snapshot);
+  const connected = snapshots.some((snapshot) => snapshot.connected);
+  const reconnecting = targets.some((monitor) => Boolean(monitor.rcon.reconnectTimer) || monitor.rcon.reconnectAttempts > 0);
+
+  if (wanted === 'all') {
+    return { connected, reconnecting, info: connected ? aggregateInfos(snapshots) : null };
+  }
+
+  const snapshot = snapshots[0];
+  return { connected: Boolean(snapshot && snapshot.connected), reconnecting, info: snapshot ? snapshot.info : null };
+}
+
+function slashInvoker(interaction) {
+  return {
+    source: 'slash',
+    async defer() {
+      if (interaction.deferred || interaction.replied) return;
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    },
+    async reply(payload) {
+      if (interaction.deferred || interaction.replied) return interaction.followUp({ ...payload, flags: MessageFlags.Ephemeral });
+      return interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
+    },
+    async edit(payload) {
+      if (interaction.deferred || interaction.replied) return interaction.editReply(payload);
+      return interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
+    },
+    async fail(error) {
+      const embed = errorEmbed(error);
+      if (interaction.deferred || interaction.replied) await interaction.followUp({ embeds: [embed], flags: MessageFlags.Ephemeral }).catch(() => {});
+      else await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral }).catch(() => {});
+    },
+  };
+}
+
+function prefixInvoker(message) {
+  return {
+    source: 'prefix',
+    async defer() {
+      await message.channel.sendTyping().catch(() => {});
+    },
+    async reply(payload) {
+      return message.reply(payload).catch(() => null);
+    },
+    async edit(payload) {
+      return message.reply(payload).catch(() => null);
+    },
+    async fail(error) {
+      await message.reply({ embeds: [errorEmbed(error)] }).catch(() => {});
+    },
+  };
+}
+
+/** One path for both /slash and !prefix: gate, run, then write the command log. */
+async function runCommand(command, options) {
+  const guild = options.guild;
+  const guildConfig = options.guildConfig ?? store.get(guild.id);
+  const invoker = options.interaction ? slashInvoker(options.interaction) : prefixInvoker(options.message);
+  const started = Date.now();
+
+  const ctx = {
+    invoker,
+    guild,
+    member: options.member ?? null,
+    user: options.user ?? options.message?.author ?? null,
+    args: options.args ?? [],
+    guildConfig,
+    store,
+    servers,
+    logs,
+    logger,
+    botOwnerIds: config.discord.botOwnerIds,
+    slot: defaultSlot(guildConfig, config.rcon.fromEnv),
+    options: readOptions({ command, interaction: options.interaction ?? null, args: options.args ?? [] }),
+    source: invoker.source,
+  };
+
+  const result = await dispatch(command, ctx);
+  const tier = result.tier === 'botOwner' ? null : result.tier;
+
+  await logs.command(guild.id, {
+    user: ctx.user,
+    tier,
+    command: command.name,
+    options: describeOptions(command, options.interaction ?? null, options.args ?? []),
+    ok: result.ok,
+    ms: Date.now() - started,
+    error: result.error && result.error !== 'permission denied' ? result.error : null,
+    guild,
+    channel: options.channel ?? null,
+  });
+
+  if (!result.ok && result.error && result.error !== 'permission denied') {
+    await logs.error(guild.id, { source: '/' + command.name, message: result.error, context: 'requested by ' + (ctx.user ? ctx.user.username : 'unknown') });
+  }
+
+  return result;
+}
+
+client.on('interactionCreate', async (interaction) => {
+  const ctx = { store, servers, logs, logger, botOwnerIds: config.discord.botOwnerIds, brand: BRAND.name };
+
+  try {
+    if ((interaction.customId ?? '').startsWith('sb:setup:')) {
+      if (interaction.isModalSubmit()) {
+        if (await handleSetupModal(interaction, ctx)) return;
+      } else if (await handleSetupComponent(interaction, ctx)) {
+        return;
+      }
+    }
+
+    if (interaction.isChatInputCommand()) {
+      if (!interaction.guild) {
+        await interaction.reply({ content: 'Use this inside a Discord server.', flags: MessageFlags.Ephemeral });
+        return;
+      }
+
+      const command = commandByName(interaction.commandName);
+      if (!command) {
+        await interaction.reply({ content: 'That command is out of date — try again in a moment.', flags: MessageFlags.Ephemeral });
+        return;
+      }
+
+      if (!store.has(interaction.guild.id)) await store.load(interaction.guild.id);
+      await runCommand(command, {
+        source: 'slash',
+        interaction,
+        guild: interaction.guild,
+        member: interaction.member,
+        user: interaction.user,
+        channel: interaction.channel,
+        guildConfig: store.get(interaction.guild.id),
+      });
+    }
+  } catch (error) {
+    logger.error('[interaction] ' + (error && error.stack ? error.stack : error));
+    try {
+      if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: '⚠️ Something went wrong. The error was logged.', flags: MessageFlags.Ephemeral });
+      }
+    } catch {
+      // Interaction is gone; nothing else to do.
+    }
+  }
+});
+
+client.on('messageCreate', async (message) => {
+  try {
+    if (!config.discord.prefixCommandsEnabled) return;
+    if (!message.guild || !message.author || message.author.bot) return;
+
+    const parsed = parsePrefixCommand(message.content, config.discord.prefix);
+    if (!parsed) return;
+
+    const command = commandByName(parsed.name);
+    if (!command || command.slashOnly) return;
+
+    if (!store.has(message.guild.id)) await store.load(message.guild.id);
+    await runCommand(command, {
+      source: 'prefix',
+      message,
+      guild: message.guild,
+      member: message.member,
+      user: message.author,
+      channel: message.channel,
+      args: parsed.args,
+      guildConfig: store.get(message.guild.id),
+    });
+  } catch (error) {
+    logger.error('[message] ' + (error && error.stack ? error.stack : error));
+  }
+});
+
+client.on('guildCreate', async (guild) => {
+  try {
+    await store.load(guild.id);
+    await servers.syncGuild(guild.id);
+    logger.info('[bot] joined ' + guild.name);
+  } catch (error) {
+    logger.warn('[bot] could not prepare guild ' + guild.id + ': ' + error.message);
+  }
+});
+
+async function registerCommands() {
+  const body = slashCommandData();
+
+  try {
+    if (config.discord.guildId) {
+      const guild = await client.guilds.fetch(config.discord.guildId);
+      await guild.commands.set(body);
+      logger.info('[commands] registered ' + body.length + ' commands in guild ' + config.discord.guildId);
+      return;
+    }
+
+    await client.application.commands.set(body);
+    logger.info('[commands] registered ' + body.length + ' global commands');
+  } catch (error) {
+    logger.error('[commands] registration failed: ' + error.message);
+  }
+}
+
+let started = false;
+
+async function start() {
+  await client.login(config.discord.token);
+  return client;
+}
+
+function onReady() {
+  if (started) return;
+  started = true;
+  main().catch((error) => logger.error('[bot] startup failed: ' + (error && error.stack ? error.stack : error)));
+}
+
+async function main() {
+  logger.info(BRAND.tagline + ' is online as ' + client.user.tag);
+
+  const ids = new Set([...client.guilds.cache.keys(), ...store.listGuildIds()]);
+  for (const id of ids) {
+    await store.load(id).catch(() => null);
+    if (client.guilds.cache.has(id)) await servers.syncGuild(id).catch((error) => logger.warn('[servers] ' + error.message));
+  }
+
+  const guildId = presenceGuildId();
+  if (guildId) await servers.refreshGuild(guildId).catch(() => null);
+
+  await presence.start();
+  await registerCommands();
+}
+
+client.once('ready', onReady);
+client.once('clientReady', onReady);
+
+client.on('error', (error) => logger.error('[discord] ' + (error && error.message ? error.message : error)));
+client.on('warn', (message) => logger.debug('[discord] ' + message));
 
 async function shutdown(signal) {
   logger.info('[bot] ' + signal + ' received, shutting down');
   presence.stop();
-  await rcon.close().catch(() => {});
-  await client.destroy();
+  await servers.stopAll().catch(() => {});
+  await client.destroy().catch(() => {});
   process.exit(0);
 }
 
 process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('unhandledRejection', (reason) => logger.error('[bot] unhandled rejection: ' + (reason && reason.stack ? reason.stack : reason)));
 
-async function main() {
-  logger.info('[bot] starting - RCON target ' + rcon.target);
-
-  rcon.connect().catch((error) => {
-    logger.warn('[rcon] initial connection failed: ' + error.message + ' - retrying in the background');
-  });
-
-  await client.login(config.discord.token);
-}
-
-main().catch((error) => {
-  logger.error('[bot] fatal: ' + error.message);
+start().catch((error) => {
+  logger.error('[bot] could not log in: ' + (error && error.message ? error.message : error));
   process.exit(1);
 });
+
+export { client, store, servers, logs, presence, relay, start, main };
