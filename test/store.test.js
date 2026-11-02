@@ -3,7 +3,17 @@ import { test } from 'node:test';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { GuildStore, configuredServers, describeConfig, emptyGuildConfig, normalizeGuildConfig, normalizeServerInput } from '../src/store.js';
+import {
+  GuildStore,
+  configuredServers,
+  dayKey,
+  describeConfig,
+  emptyGuildConfig,
+  normalizeGuildConfig,
+  normalizeServerInput,
+  peakFor,
+  recordPeak,
+} from '../src/store.js';
 
 const silentLogger = { debug() {}, info() {}, warn() {}, error() {} };
 
@@ -107,4 +117,46 @@ test('GuildStore.update reads, mutates and writes', async (t) => {
 
   // A guild with no file yet loads as an empty config instead of throwing.
   assert.equal((await store.load('guild-2')).roles.owner, null);
+});
+
+test('recordPeak keeps the busiest moment of the day per slot', () => {
+  const config = { stats: {} };
+  const morning = new Date('2026-11-02T09:00:00Z');
+  const evening = new Date('2026-11-02T19:30:00Z');
+
+  assert.equal(recordPeak(config, 1, 40, morning), true);
+  assert.equal(recordPeak(config, 1, 12, evening), false, 'a lower count is not a new peak');
+  assert.equal(recordPeak(config, 1, 63, evening), true);
+  assert.deepEqual(peakFor(config, 1, evening), { peak: 63, at: evening.toISOString() });
+
+  const nextDay = new Date('2026-11-03T00:05:00Z');
+  assert.equal(recordPeak(config, 1, 0, nextDay), true, 'a new day resets the peak');
+  assert.deepEqual(peakFor(config, 1, nextDay), { peak: 0, at: nextDay.toISOString() });
+  assert.equal(peakFor(config, 1, evening), null, 'yesterday is not today');
+  assert.equal(peakFor(config, 2, evening), null, 'empty slots have no peak');
+  assert.equal(recordPeak(config, 1, 'many'), false, 'junk counts are ignored');
+});
+
+test('dayKey is the UTC day of a timestamp', () => {
+  assert.equal(dayKey('2026-11-02T23:59:59Z'), '2026-11-02');
+  assert.equal(dayKey(new Date('2026-11-02T00:00:00Z')), '2026-11-02');
+  assert.equal(dayKey('nonsense'), '');
+});
+
+test('normalizeGuildConfig keeps valid stats and drops junk', () => {
+  const config = normalizeGuildConfig(
+    {
+      stats: {
+        1: { day: '2026-11-02', peak: '63', peakAt: '2026-11-02T19:30:00.000Z' },
+        2: { day: 'nope', peak: 5 },
+        3: 'junk',
+        4: { day: '2026-11-02', peak: 1 },
+      },
+    },
+    'guild-1',
+  );
+
+  assert.deepEqual(Object.keys(config.stats), ['1']);
+  assert.deepEqual(config.stats['1'], { day: '2026-11-02', peak: 63, peakAt: '2026-11-02T19:30:00.000Z' });
+  assert.deepEqual(emptyGuildConfig('g').stats, {});
 });
