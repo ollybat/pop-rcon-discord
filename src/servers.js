@@ -211,7 +211,9 @@ export class ServerMonitor {
       const next = new Map(players.map((player) => [player.id, player]));
 
       if (this.seeded) {
-        const changes = capEvents(diffPlayers(previous, next));
+        // diffPlayers wants the new roster as an array: handing it the Map made it report a
+        // phantom join and leave for every player on every single poll.
+        const changes = capEvents(diffPlayers(previous, players));
         for (const player of changes.joined) this.firstSeen.set(player.id, Date.now());
         for (const player of changes.left) {
           const since = this.firstSeen.get(player.id);

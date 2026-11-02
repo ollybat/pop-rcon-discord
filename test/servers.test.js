@@ -89,3 +89,35 @@ test('serverSignature changes when a server changes', () => {
   assert.notEqual(a, b);
   assert.equal(a, serverSignature([{ slot: 1, host: 'h', port: 1, password: 'p', name: 'n' }]));
 });
+
+test('a poll diffs the roster, not the internal map', async () => {
+  // A monitor that polls the same roster twice must report no changes at all. Passing the player
+  // Map to diffPlayers instead of the array reported every player as leaving and joining.
+  const { ServerMonitor } = await import('../src/servers.js');
+  const monitor = new ServerMonitor({
+    guildId: 'guild-1',
+    server: { slot: 1, name: 'Spinback 5X EU', host: '127.0.0.1', port: 28016, password: 'x' },
+    pollIntervalMs: 60000,
+    logger: silentLogger,
+  });
+
+  const events = [];
+  monitor.onChanges = (changes) => events.push(changes);
+
+  const players = [{ id: '1', name: 'alpha', ping: 20, seconds: 100 }];
+  monitor.rcon = {
+    connected: true,
+    sendJson: async (command) =>
+      command === 'serverinfo'
+        ? { data: { Players: 1, MaxPlayers: 100, Queued: 0, Joining: 0, Uptime: 60, Restarting: false, Server: 'Spinback 5X EU' } }
+        : { data: [{ SteamID: '1', DisplayName: 'alpha', Ping: 20, ConnectedSeconds: 100 }] },
+  };
+
+  await monitor.refresh();
+  assert.equal(monitor.seeded, true, 'the first poll seeds');
+  assert.equal(events.length, 0, 'nothing is reported out of the first poll');
+
+  await monitor.refresh();
+  assert.deepEqual(events, [], 'a second poll of the same roster is silent');
+  assert.deepEqual([...monitor.players.keys()], ['1']);
+});
