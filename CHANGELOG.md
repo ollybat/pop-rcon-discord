@@ -4,6 +4,33 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0]
+
+Making setup one click and /pop alive.
+
+### Added
+
+- **`/setup` ⚡ Quick setup** - guesses the staff roles from the role names already in the server
+  (`matchRolesByName` in `src/permissions.js`) and creates a `🎧 Spinback` category with the four
+  log channels (`createLogChannels`), then reports exactly what it did and what is left.
+- `/setup` **🪄 Guess roles**, **📁 Make channels**, **📖 Guide**, **🧹 Reset** and a **Test** button
+  per server; the guide embed carries the exact `+rcon.web 1` start line.
+- `src/pop.js` - interactive population: **/pop** answers with buttons to switch server, refresh on
+  demand and show or hide the player list, plus the summary embed for several servers.
+- `/status` and `/help`, both for everyone, in slash and prefix form.
+- Daily peaks: `recordPeak` / `peakFor` / `dayKey` in `src/store.js` remember the busiest moment of
+  each UTC day per server (config version 2, old files still load) and `/pop` + `/status` show them.
+- A welcome embed in a new server (with `/setup` instructions) and the bot renames itself to
+  `Spinback` where it is allowed to.
+- Tests for peaks, role guessing and the whole pop surface.
+
+### Changed
+
+- `.env.example` is now `/setup`-first: `DISCORD_TOKEN` is the only required value, and the
+  `RCON_*` block is documented as an optional shortcut for slot 1.
+- `src/embeds.js` gained `guideEmbed`, `statusEmbed`, `helpEmbed`, `welcomeEmbed` and `peakLine`.
+- `ServerManager` forwards every snapshot, which is what records the peaks.
+
 ## [0.4.0]
 
 The Spinback release: a setup wizard, a population command and role-gated staff tools.
