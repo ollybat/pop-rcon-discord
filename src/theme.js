@@ -4,7 +4,7 @@ export const BRAND = {
   tagline: 'Spinback pop bot',
   serverDefault: 'Spinback 5X EU',
   clan: 'Spinback clan',
-  version: '0.5.0',
+  version: '0.6.0',
 };
 
 /** Light blue is the brand colour; the rest stay semantic so status is still readable. */

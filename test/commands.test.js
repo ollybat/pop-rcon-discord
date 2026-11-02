@@ -15,7 +15,7 @@ test('every command has a usable slash definition', () => {
     names.add(definition.name);
   }
 
-  assert.deepEqual([...names].sort(), ['ban', 'console', 'help', 'kick', 'players', 'pop', 'say', 'setup', 'status']);
+  assert.deepEqual([...names].sort(), ['ban', 'board', 'console', 'help', 'kick', 'players', 'pop', 'save', 'say', 'setup', 'status']);
 });
 
 test('setup is owner only and slash only, and staff commands need a tier', () => {
@@ -24,10 +24,11 @@ test('setup is owner only and slash only, and staff commands need a tier', () =>
   assert.equal(setup.slashOnly, true);
   assert.equal(setup.minTier, null);
 
-  for (const name of ['pop', 'status', 'help']) assert.equal(commandByName(name).minTier, null, name + ' is for everyone');
+  for (const name of ['pop', 'status', 'help', 'board']) assert.equal(commandByName(name).minTier, null, name + ' is for everyone');
   assert.equal(commandByName('players').minTier, 'moderator');
   assert.equal(commandByName('say').minTier, 'admin');
   assert.equal(commandByName('kick').minTier, 'admin');
+  assert.equal(commandByName('save').minTier, 'admin', 'saving the world needs an admin');
   assert.equal(commandByName('ban').minTier, 'headAdmin');
   assert.equal(commandByName('console').minTier, 'coOwner');
 
@@ -37,7 +38,7 @@ test('setup is owner only and slash only, and staff commands need a tier', () =>
 });
 
 test('prefix usage is documented for the message commands', () => {
-  for (const name of ['pop', 'status', 'help', 'players', 'say', 'kick', 'ban', 'console']) {
+  for (const name of ['pop', 'status', 'help', 'board', 'players', 'say', 'kick', 'save', 'ban', 'console']) {
     assert.match(commandByName(name).prefixUsage, /^!/, name + ' needs a !usage line');
   }
   assert.equal(commandByName('setup').prefixUsage, undefined, 'setup is slash only');

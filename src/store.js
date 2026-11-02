@@ -3,7 +3,10 @@ import { chmodSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const MAX_SERVERS = 3;
-export const CONFIG_VERSION = 2;
+export const CONFIG_VERSION = 3;
+
+/** How many days of peaks are kept per server. */
+export const HISTORY_DAYS = 90;
 
 export function emptyGuildConfig(guildId) {
   return {
@@ -84,14 +87,64 @@ function normalizeStats(raw) {
     const day = String(entry.day ?? '');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
 
+    const peak = Math.max(0, Math.floor(Number(entry.peak) || 0));
+    const days = cleanDays(entry.days);
+    if (!(day in days)) days[day] = peak;
+
     stats[key] = {
       day,
-      peak: Math.max(0, Number(entry.peak) || 0),
+      peak,
       peakAt: typeof entry.peakAt === 'string' ? entry.peakAt : null,
+      best: cleanBest(entry.best, days),
+      days: pruneDays(days),
     };
   }
 
   return stats;
+}
+
+/** A { 'YYYY-MM-DD': players } map with the junk removed. */
+function cleanDays(raw) {
+  const days = {};
+  if (!raw || typeof raw !== 'object') return days;
+
+  for (const [day, value] of Object.entries(raw)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+    const count = Number(value);
+    if (!Number.isFinite(count) || count < 0) continue;
+    days[day] = Math.floor(count);
+  }
+
+  return days;
+}
+
+/** Keep the newest HISTORY_DAYS days. */
+function pruneDays(days) {
+  const keys = Object.keys(days).sort();
+  if (keys.length <= HISTORY_DAYS) return days;
+
+  const kept = {};
+  for (const day of keys.slice(keys.length - HISTORY_DAYS)) kept[day] = days[day];
+  return kept;
+}
+
+/** The best day ever: the stored one if it is valid, otherwise the best in the history. */
+function cleanBest(raw, days) {
+  const stored = raw && typeof raw === 'object' ? Number(raw.peak) : NaN;
+  if (Number.isFinite(stored) && stored >= 0) {
+    return {
+      peak: Math.floor(stored),
+      day: /^\d{4}-\d{2}-\d{2}$/.test(String(raw.day ?? '')) ? String(raw.day) : null,
+      at: typeof raw.at === 'string' ? raw.at : null,
+    };
+  }
+
+  const entries = Object.entries(days);
+  if (entries.length === 0) return null;
+
+  let best = { peak: -1, day: null, at: null };
+  for (const [day, count] of entries) if (count > best.peak) best = { peak: count, day, at: null };
+  return best.peak >= 0 ? best : null;
 }
 
 /** The UTC day a timestamp belongs to, as YYYY-MM-DD. */
@@ -116,20 +169,51 @@ export function recordPeak(config, slot, players, at = new Date()) {
   if (!day) return false;
 
   const stamp = at instanceof Date ? at.toISOString() : new Date(at).toISOString();
-  const current = config.stats[key];
+  const count = Math.floor(value);
+  const entry = config.stats[key] ?? { day, peak: count, peakAt: stamp, best: null, days: {} };
+  entry.days = cleanDays(entry.days);
 
-  if (!current || current.day !== day) {
-    config.stats[key] = { day, peak: Math.floor(value), peakAt: stamp };
-    return true;
+  let changed = false;
+  if (entry.day !== day) {
+    entry.day = day;
+    entry.peak = count;
+    entry.peakAt = stamp;
+    changed = true;
+  } else if (count > entry.peak) {
+    entry.peak = count;
+    entry.peakAt = stamp;
+    changed = true;
   }
 
-  if (value > current.peak) {
-    current.peak = Math.floor(value);
-    current.peakAt = stamp;
-    return true;
-  }
+  if (count > (entry.days[day] ?? -1)) entry.days[day] = count;
+  if (count > (entry.best?.peak ?? -1)) entry.best = { peak: count, day, at: stamp };
+  entry.days = pruneDays(entry.days);
 
-  return false;
+  config.stats[key] = entry;
+  return changed;
+}
+
+/** The best day ever recorded for a slot, or null. */
+export function bestFor(config, slot) {
+  const entry = config?.stats?.[String(slot)];
+  if (!entry) return null;
+  return entry.best ?? cleanBest(null, cleanDays(entry.days));
+}
+
+/** The recorded days for a slot, newest first. */
+export function historyFor(config, slot, limit = HISTORY_DAYS) {
+  const days = cleanDays(config?.stats?.[String(slot)]?.days);
+  return Object.entries(days)
+    .map(([day, peak]) => ({ day, peak }))
+    .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0))
+    .slice(0, Math.max(1, limit));
+}
+
+/** The busiest recorded days for a slot, highest first. */
+export function topDays(config, slot, limit = 5) {
+  return historyFor(config, slot, HISTORY_DAYS)
+    .sort((a, b) => b.peak - a.peak || (a.day < b.day ? 1 : -1))
+    .slice(0, Math.max(1, limit));
 }
 
 /** Today's peak for a slot, or null when there is nothing recorded for today. */
