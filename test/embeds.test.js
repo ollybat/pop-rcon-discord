@@ -4,6 +4,7 @@ import { COLORS, STATUS } from '../src/theme.js';
 import { emptyGuildConfig, recordPeak } from '../src/store.js';
 import {
   baseEmbed,
+  boardEmbed,
   commandLogEmbed,
   errorEmbed,
   errorLogEmbed,
@@ -307,4 +308,21 @@ test('welcomeEmbed tells a new server owner what to do first', () => {
   assert.match(embed.data.description, /\/setup/);
   assert.match(embed.data.description, /Guess roles/);
   assert.match(embed.data.description, /!pop/);
+});
+
+test('boardEmbed shows the best day, today and the busiest days', () => {
+  const config = buildConfig();
+  recordPeak(config, 1, 40, new Date('2026-11-01T18:00:00Z'));
+  recordPeak(config, 1, 63, new Date('2026-11-02T18:00:00Z'));
+
+  const embed = boardEmbed({ config, snapshots: [{ slot: 1, connected: true, info: { players: 4, max: 200 } }] });
+
+  assert.match(embed.data.title, /record book/i);
+  assert.match(embed.data.fields[0].name, /1\./);
+  assert.match(embed.data.fields[0].value, /Best day: \*\*63\/200\*\* on 2026-11-02/);
+  assert.match(embed.data.fields[0].value, /Busiest:/);
+  assert.match(embed.data.footer.text, /90 days/);
+
+  const empty = boardEmbed({ config: emptyGuildConfig('g') });
+  assert.match(empty.data.description, /\/setup/);
 });
