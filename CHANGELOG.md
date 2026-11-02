@@ -4,6 +4,35 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.3] - private setup, better commands
+
+### Added
+
+- **The health endpoint is documented and the panel says it is private**: `/setup` now spells out
+  that the panel, every answer and every test result are visible to the server owner alone, and
+  `/ping` carries a *🔒 Private* footer.
+
+### Changed - nothing about the setup can leak any more
+
+- **`scrubSecrets()`** in `format.js`: strips the password out of a `ws://host:port/<password>`
+  URL and out of any text it is handed.
+- `LogRouter.error()` and `status()` run every message, context and stack through that scrubber
+  with the guild's own stored passwords, so a log channel can never show one.
+- `errorEmbed`, `errorLogEmbed` and the public `!pop` embed (which prints the RCON error when a
+  server is unreachable) are scrubbed as well.
+- **Prefix commands marked `private` answer in a DM.** `!ping` used to print the clan's server
+  names and latencies into the channel; it no longer can. If DMs are closed the bot replies with a
+  short note instead of the report.
+- **The 📡 Server Status channel no longer repeats `host:port`** - it says the server is connected
+  and leaves the address in `/setup`.
+
+### Changed - command polish
+
+- `/ping` gained a **🧩 Runtime** line (poll interval, RAM, node version) and reports the gateway
+  ping, uptime, build, every server's RCON round-trip and the public URL in one private answer.
+- `!pop`'s summary footer now says how fresh it is (`refreshed every 20s`).
+- The setup panel's *Ready* line no longer claims role-gated staff commands exist.
+
 ## [0.6.2] - /ping, and an app URL that answers
 
 ### Added

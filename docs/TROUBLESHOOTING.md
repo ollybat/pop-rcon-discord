@@ -70,6 +70,12 @@ Then `https://<your-subdomain>.apps.bot-hosting.cloud/ping` returns the word `po
 `/health` returns JSON with the bot, the gateway ping and every server's player count. `/ping`
 in Discord calls the same URL when **PUBLIC_URL** is set.
 
+## `!ping` answers "🔒 Answered in private" instead of the report
+
+That is the fallback when the bot cannot DM you. Private commands are never printed into the
+channel. Allow **direct messages from server members** in your Discord privacy settings (or just use
+`/ping`, which always answers ephemerally).
+
 ## `!pop` does nothing
 
 Prefix commands need all three of:

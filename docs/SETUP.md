@@ -59,6 +59,9 @@ If you want the `!pop` prefix commands, also enable **Message Content Intent** o
 
 ## 4. Run /setup
 
+Everything the wizard shows is **private to you**: the panel, every button answer, every modal and
+every test result. RCON passwords are displayed masked and are never posted to a channel.
+
 Type `/setup` in any channel. Only the **server owner** (or a **bot owner** from
 `BOT_OWNER_IDS`) gets the panel; everyone else is told to ask an owner.
 

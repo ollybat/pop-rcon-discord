@@ -31,6 +31,26 @@ server owner a **/setup** wizard plus one headline command for everybody: **!pop
 - **Light blue everywhere** - every embed uses the Spinback palette and footer, and the bot wears
   the name Spinback in your server.
 
+## Privacy
+
+Nothing about the setup is public, and nothing secret ever leaves the container:
+
+- **/setup is yours alone.** The panel, every button answer, every modal and every **Test** result
+  are ephemeral - Discord shows them to the caller and to nobody else. Only the Discord server
+  owner (or a bot owner) can open it at all.
+- **/ping is private too**, and restricted to 👑 Owner and 🛡️ Co-Owner. Both slash commands always
+  answer ephemerally.
+- **Prefix commands that are private answer in a DM.** `!ping` from the owner never appears in the
+  channel; if DMs are closed the bot replies with a short note instead of the report.
+- **RCON passwords are never rendered.** The panel shows them masked (`hu***r2`), and a scrubber
+  removes the password from every error, status and command-log line before it is posted - including
+  the `ws://host:port/<password>` URL shape that Rust uses.
+- **The 📡 Server Status channel says a server is connected, never its address.**
+- **The public health endpoint** (`/health`) only ever returns: bot tag, version, uptime, gateway
+  ping, guild count and per-server player counts. No host, no port, no password.
+- **`!pop` is public on purpose** - population is for the whole clan - and it contains no server
+  address and no secret.
+
 ## Requirements
 
 | | |
