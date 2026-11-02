@@ -1,14 +1,14 @@
-import { EmbedBuilder } from 'discord.js';
+/** Optional: mirrors Rust in-game chat into one Discord channel. */
 
 /** The one place that decides how an in-game chat line looks in Discord. */
 export function formatChatMessage({ message, raw }) {
-  const username = raw?.Username || 'unknown';
-  const channel = raw?.Channel || 'global';
-  return '**[' + channel + '] ' + username + ':** ' + message;
+  const username = raw?.Username ?? raw?.Name ?? 'unknown';
+  const channel = raw?.Channel ?? 'global';
+  return '**[Rust ' + channel + '] ' + username + ':** ' + String(message ?? '').slice(0, 1500);
 }
 
 /**
- * Posts RCON events into one Discord channel.
+ * Posts RCON chat events into one Discord channel.
  * Does nothing at all when no channel is configured, and re-resolves the
  * channel after a failure instead of caching a broken one.
  */
@@ -45,20 +45,7 @@ export class ChannelRelay {
     }
   }
 
-  async chat({ message, raw }) {
-    return this.send(formatChatMessage({ message, raw }));
-  }
-
-  async rconConnected(target) {
-    return this.send({
-      embeds: [new EmbedBuilder().setColor(0x3ba55d).setDescription('RCON connected to ' + target)],
-    });
-  }
-
-  async rconDisconnected({ code, reason }) {
-    const suffix = reason ? ': ' + reason : '';
-    return this.send({
-      embeds: [new EmbedBuilder().setColor(0xed4245).setDescription('RCON disconnected (code ' + code + suffix + ')')],
-    });
+  async chat(event) {
+    return this.send(formatChatMessage(event));
   }
 }

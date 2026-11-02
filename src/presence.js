@@ -1,4 +1,5 @@
 import { ActivityType } from 'discord.js';
+import { COLORS, STATUS } from './theme.js';
 
 export const STATE = {
   ONLINE: 'online',
@@ -13,6 +14,8 @@ const DOT = {
   resting: 'idle',
 };
 
+export { COLORS, STATUS };
+
 /**
  * Fill the placeholders in a presence template.
  * Unknown placeholders are left alone so a typo shows up instead of going unnoticed.
@@ -25,6 +28,7 @@ export function formatPresence(template, info = {}) {
     queued: info.queued ?? 0,
     joining: info.joining ?? 0,
     uptime: info.uptime ?? '—',
+    servers: info.servers ?? '—',
   };
 
   let text = String(template ?? '');
@@ -51,6 +55,26 @@ export function normalizeServerInfo(data) {
   };
 }
 
+/** Sum several server snapshots so one status line can cover every server. */
+export function aggregateInfos(snapshots) {
+  const online = (snapshots ?? []).filter((snapshot) => snapshot && snapshot.connected && snapshot.info);
+  if (online.length === 0) return null;
+
+  return online.reduce(
+    (total, snapshot) => ({
+      players: total.players + snapshot.info.players,
+      max: total.max + snapshot.info.max,
+      queued: total.queued + snapshot.info.queued,
+      joining: total.joining + snapshot.info.joining,
+      uptime: total.uptime === null ? snapshot.info.uptime : Math.min(total.uptime, snapshot.info.uptime ?? total.uptime),
+      restarting: total.restarting && snapshot.info.restarting,
+      hostname: online.length === 1 ? snapshot.info.hostname : online.length + ' servers',
+      servers: online.length,
+    }),
+    { players: 0, max: 0, queued: 0, joining: 0, uptime: null, restarting: true, hostname: null, servers: 0 },
+  );
+}
+
 /**
  * Decide which of the three states the server is in.
  * snapshot: { connected, reconnecting, info }
@@ -75,11 +99,14 @@ export function presenceFor(snapshot, options) {
   return { state: STATE.ONLINE, text: formatPresence(formats.online, snapshot.info) };
 }
 
-/** Keeps the bot's "Watching ..." activity in sync with the Rust server. */
+/**
+ * Keeps the bot's "Watching ..." activity in sync with the Rust servers.
+ * The provider is an async function returning { connected, reconnecting, info }.
+ */
 export class PresenceManager {
-  constructor({ client, rcon, options, logger = console }) {
+  constructor({ client, provider, options, logger = console }) {
     this.client = client;
-    this.rcon = rcon;
+    this.provider = provider;
     this.options = options;
     this.logger = logger;
 
@@ -99,10 +126,6 @@ export class PresenceManager {
       this.refresh().catch((error) => this.logger.warn('[presence] refresh failed: ' + error.message));
     };
 
-    // React to a connection change immediately instead of waiting for the next poll.
-    this.rcon.on('connected', refresh);
-    this.rcon.on('disconnected', refresh);
-
     await this.refresh();
 
     this.timer = setInterval(refresh, this.options.intervalSeconds * 1000);
@@ -116,21 +139,16 @@ export class PresenceManager {
   }
 
   async refresh() {
-    const connected = this.rcon.connected;
-    const reconnecting = Boolean(this.rcon.reconnectTimer) || this.rcon.reconnectAttempts > 0;
-    let info = null;
+    let snapshot = { connected: false, reconnecting: false, info: null };
 
-    if (connected) {
-      try {
-        const { data } = await this.rcon.sendJson('serverinfo');
-        info = normalizeServerInfo(data);
-      } catch (error) {
-        this.logger.warn('[presence] could not read serverinfo: ' + error.message);
-      }
+    try {
+      snapshot = (await this.provider()) ?? snapshot;
+    } catch (error) {
+      this.logger.warn('[presence] could not read the server state: ' + error.message);
     }
 
-    this.info = info;
-    this.apply(presenceFor({ connected, reconnecting, info }, this.options));
+    this.info = snapshot.info ?? null;
+    this.apply(presenceFor(snapshot, this.options));
   }
 
   apply(next) {
