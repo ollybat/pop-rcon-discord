@@ -1,17 +1,15 @@
-import { Client, EmbedBuilder, Events, GatewayIntentBits, MessageFlags, REST, Routes } from 'discord.js';
+import { Client, EmbedBuilder, Events, GatewayIntentBits } from 'discord.js';
 import { config } from './config.js';
-import { commands } from './commands.js';
+import { PresenceManager } from './presence.js';
 import { RustRconClient } from './rcon.js';
 
 const rcon = new RustRconClient(config.rcon);
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-const handlers = new Map(commands.map((command) => [command.data.name, command]));
-
-function isAllowed(member) {
-  if (config.discord.commandRoleIds.length === 0) return true;
-  if (!member || !member.roles) return false;
-  return member.roles.cache.some((role) => config.discord.commandRoleIds.includes(role.id));
-}
+const presence = new PresenceManager({
+  client,
+  rcon,
+  options: config.presence,
+});
 
 async function relay(content) {
   if (!config.discord.consoleChannelId) return;
@@ -34,7 +32,7 @@ rcon.on('disconnected', ({ code, reason }) => {
   });
 });
 
-// Server chat has no identifier, so it lands here rather than in a command reply.
+// Server chat carries no identifier, so it always arrives as a broadcast.
 rcon.on('chat', ({ message, raw }) => {
   const username = raw?.Username ?? 'unknown';
   const channel = raw?.Channel ?? 'global';
@@ -47,55 +45,12 @@ rcon.on('error', (error) => {
 
 client.once(Events.ClientReady, async (ready) => {
   console.log('[discord] logged in as ' + ready.user.tag);
-
-  const rest = new REST().setToken(config.discord.token);
-  const body = commands.map((command) => command.data.toJSON());
-  const appId = config.discord.appId ?? ready.application.id;
-  const scope = config.discord.guildId ? 'guild ' + config.discord.guildId : 'globally';
-
-  try {
-    await rest.put(
-      config.discord.guildId
-        ? Routes.applicationGuildCommands(appId, config.discord.guildId)
-        : Routes.applicationCommands(appId),
-      { body },
-    );
-    console.log('[discord] registered ' + body.length + ' commands ' + scope);
-  } catch (error) {
-    console.error('[discord] command registration failed: ' + error.message);
-  }
-});
-
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
-
-  const handler = handlers.get(interaction.commandName);
-  if (!handler) return;
-
-  if (!isAllowed(interaction.member)) {
-    await interaction.reply({
-      content: 'You do not have permission to use this command.',
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  try {
-    await handler.execute({ interaction, rcon, client });
-  } catch (error) {
-    console.error('[discord] /' + interaction.commandName + ' failed: ' + error.message);
-    try {
-      await interaction.editReply({ content: 'Command failed: ' + error.message });
-    } catch {
-      // interaction already gone - nothing else to do
-    }
-  }
+  await presence.start();
 });
 
 async function shutdown(signal) {
   console.log('[bot] ' + signal + ' received, shutting down');
+  presence.stop();
   await rcon.close().catch(() => {});
   await client.destroy();
   process.exit(0);
