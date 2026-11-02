@@ -6,13 +6,16 @@ import { join } from 'node:path';
 import {
   GuildStore,
   configuredServers,
+  bestFor,
   dayKey,
   describeConfig,
+  historyFor,
   emptyGuildConfig,
   normalizeGuildConfig,
   normalizeServerInput,
   peakFor,
   recordPeak,
+  topDays,
 } from '../src/store.js';
 
 const silentLogger = { debug() {}, info() {}, warn() {}, error() {} };
@@ -157,6 +160,69 @@ test('normalizeGuildConfig keeps valid stats and drops junk', () => {
   );
 
   assert.deepEqual(Object.keys(config.stats), ['1']);
-  assert.deepEqual(config.stats['1'], { day: '2026-11-02', peak: 63, peakAt: '2026-11-02T19:30:00.000Z' });
+  assert.equal(config.stats['1'].day, '2026-11-02');
+  assert.equal(config.stats['1'].peak, 63);
+  assert.equal(config.stats['1'].peakAt, '2026-11-02T19:30:00.000Z');
+  assert.deepEqual(config.stats['1'].days, { '2026-11-02': 63 }, 'the stored peak seeds the history');
+  assert.equal(config.stats['1'].best, null, 'no best day was stored, and the history has one day');
   assert.deepEqual(emptyGuildConfig('g').stats, {});
+});
+
+test('the record book keeps the best day and the history', () => {
+  const config = { stats: {} };
+  const day = (text) => new Date(text + 'T18:00:00Z');
+
+  recordPeak(config, 1, 40, day('2026-11-01'));
+  recordPeak(config, 1, 63, day('2026-11-02'));
+  recordPeak(config, 1, 12, day('2026-11-03'));
+
+  assert.deepEqual(bestFor(config, 1), { peak: 63, day: '2026-11-02', at: '2026-11-02T18:00:00.000Z' });
+  assert.deepEqual(
+    historyFor(config, 1).map((entry) => entry.day),
+    ['2026-11-03', '2026-11-02', '2026-11-01'],
+    'newest first',
+  );
+  assert.deepEqual(topDays(config, 1, 2), [
+    { day: '2026-11-02', peak: 63 },
+    { day: '2026-11-01', peak: 40 },
+  ]);
+
+  // one day is one entry, even when the peak moves
+  recordPeak(config, 1, 80, day('2026-11-02'));
+  assert.deepEqual(historyFor(config, 1).map((entry) => entry.peak), [12, 80, 40]);
+  assert.equal(bestFor(config, 1).peak, 80);
+
+  assert.equal(bestFor(config, 2), null);
+  assert.deepEqual(historyFor(config, 2), []);
+  assert.deepEqual(topDays(config, 2), []);
+});
+
+test('normalizeGuildConfig keeps a history and derives a missing best day', () => {
+  const config = normalizeGuildConfig(
+    {
+      stats: {
+        1: { day: '2026-11-02', peak: 10, peakAt: null, days: { '2026-10-31': 77, '2026-11-02': 10, 'not-a-day': 99, '2026-11-01': -4 } },
+        2: { day: '2026-11-02', peak: 5, peakAt: null, best: { peak: 90, day: '2026-10-01', at: '2026-10-01T00:00:00.000Z' } },
+      },
+    },
+    'g',
+  );
+
+  assert.deepEqual(config.stats['1'].days, { '2026-10-31': 77, '2026-11-02': 10 });
+  assert.deepEqual(config.stats['1'].best, { peak: 77, day: '2026-10-31', at: null }, 'the best day comes from the history');
+  assert.deepEqual(config.stats['2'].best, { peak: 90, day: '2026-10-01', at: '2026-10-01T00:00:00.000Z' });
+  assert.deepEqual(config.stats['2'].days, { '2026-11-02': 5 }, 'a missing history is seeded from today');
+});
+
+test('the history is capped', () => {
+  const config = { stats: {} };
+  for (let index = 0; index < 120; index += 1) {
+    const at = new Date(Date.UTC(2026, 0, 1 + index, 12));
+    recordPeak(config, 1, 10 + index, at);
+  }
+
+  const history = historyFor(config, 1);
+  assert.equal(history.length, 90, 'only the last 90 days are kept');
+  assert.equal(history[0].day, history[0].day, 'newest first');
+  assert.ok(history[0].day > history[history.length - 1].day);
 });
