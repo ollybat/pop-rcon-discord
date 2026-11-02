@@ -90,6 +90,16 @@ export const config = {
       resting: optionalString('PRESENCE_RESTING_FORMAT', DEFAULT_PRESENCE.resting),
     },
   },
+  web: {
+    // The free hosts give the app a port (SERVER_PORT) and proxy it publicly; a health
+    // endpoint there means the URL answers instead of showing "app unreachable".
+    enabled: optionalBoolean('WEB_ENABLED', true),
+    port: optionalNumber('WEB_PORT', optionalNumber('SERVER_PORT', 0)),
+    host: optionalString('WEB_HOST', '0.0.0.0'),
+    // The address you would paste into a browser, for /ping to call back. Optional.
+    publicUrl: optionalString('PUBLIC_URL'),
+    timeoutMs: optionalNumber('WEB_PROBE_TIMEOUT_MS', 4000),
+  },
   log: {
     level: optionalString('LOG_LEVEL', 'info').toLowerCase(),
     timestamps: optionalBoolean('LOG_TIMESTAMPS', true),

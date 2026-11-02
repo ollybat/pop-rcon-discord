@@ -1,15 +1,17 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { COLORS, TIERS, tierById } from './theme.js';
-import { baseEmbed } from './embeds.js';
+import { baseEmbed, pingEmbed } from './embeds.js';
 import { popPayload, popPlaceholder } from './pop.js';
 import { canRun } from './permissions.js';
 import { effectiveServers } from './servers.js';
+import { probeHealth } from './web.js';
 
 /**
- * The bot serves exactly two commands.
+ * The bot serves three commands.
  *
  *   /setup  — the setup panel, for the Discord server owner and the bot owner only.
  *   !pop    — the headline command, open to everybody, in prefix form.
+ *   /ping   — health check (Discord ping, RCON round-trip, the public URL), for the clan owners.
  *
  * Everything else (staff tools, logs, the record book) is served through the setup panel,
  * its buttons and the status line, so the slash menu stays short and obvious.
@@ -58,6 +60,34 @@ export const commands = [
       await ctx.invoker.edit(popPayload({ snapshots, config: ctx.guildConfig, showPlayers, focus: slot }));
     },
   },
+  {
+    name: 'ping',
+    description: 'Health check: Discord ping, RCON ping and the public URL (Owner and Co-Owner)',
+    prefixUsage: '!ping',
+    minTier: 'coOwner',
+    data: new SlashCommandBuilder().setName('ping').setDescription('Health check: Discord ping, RCON ping and the public URL'),
+    async run(ctx) {
+      await ctx.invoker.defer();
+
+      const snapshots = await ctx.servers.refreshGuild(ctx.guild.id).catch(() => []);
+      const web = ctx.web ?? {};
+      const health = web.publicUrl ? await probeHealth({ url: web.publicUrl, timeoutMs: web.timeoutMs }) : null;
+      const localUrl = !health && web.enabled && web.port ? 'http://127.0.0.1:' + web.port + '/health' : null;
+
+      await ctx.invoker.edit({
+        embeds: [
+          pingEmbed({
+            gatewayMs: ctx.client?.ws?.ping ?? null,
+            uptimeSeconds: Math.round(process.uptime()),
+            snapshots,
+            health,
+            localUrl,
+          }),
+        ],
+      });
+    },
+  },
+
 ];
 
 export function commandByName(name) {

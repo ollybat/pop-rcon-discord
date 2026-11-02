@@ -11,6 +11,7 @@ import { errorEmbed, hintEmbed, welcomeEmbed } from './embeds.js';
 import { handlePopComponent } from './pop.js';
 import { handleSetupComponent, handleSetupModal } from './setup/index.js';
 import { parsePrefixCommand } from './prefix.js';
+import { createHealthServer } from './web.js';
 import { BRAND, COLORS } from './theme.js';
 
 const logger = createLogger({ level: config.log.level, timestamps: config.log.timestamps });
@@ -43,6 +44,41 @@ const servers = new ServerManager({
       message: error.message,
       context: error.source,
     }),
+});
+
+const startedAt = Date.now();
+
+/** Everything the public health endpoint is allowed to say: never a secret, never a password. */
+function healthStatus() {
+  const roster = [];
+  for (const guildId of store.listGuildIds()) {
+    for (const snapshot of servers.snapshots(guildId)) {
+      roster.push({
+        slot: snapshot.slot,
+        name: snapshot.name,
+        connected: Boolean(snapshot.connected),
+        players: snapshot.info?.players ?? null,
+        max: snapshot.info?.max ?? null,
+        queued: snapshot.info?.queued ?? null,
+        latencyMs: snapshot.latencyMs ?? null,
+      });
+    }
+  }
+
+  return {
+    bot: client.user?.tag ?? null,
+    uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
+    gatewayPingMs: Number.isFinite(client.ws?.ping) ? client.ws.ping : null,
+    guilds: client.guilds.cache.size,
+    servers: roster,
+  };
+}
+
+const health = createHealthServer({
+  logger,
+  port: config.web.enabled ? config.web.port : null,
+  host: config.web.host,
+  status: healthStatus,
 });
 
 const presence = new PresenceManager({
@@ -209,6 +245,8 @@ async function runCommand(command, options) {
     logs,
     logger,
     botOwnerIds: config.discord.botOwnerIds,
+    client,
+    web: config.web,
     slot: defaultSlot(guildConfig, config.rcon.fromEnv),
     prefix: config.discord.prefix,
     prefixEnabled: config.discord.prefixCommandsEnabled,
@@ -421,6 +459,8 @@ function onReady() {
 async function main() {
   logger.info(BRAND.tagline + ' is online as ' + client.user.tag);
 
+  await health.start().catch((error) => logger.warn('[web] could not listen on port ' + config.web.port + ': ' + error.message));
+
   const ids = new Set([...client.guilds.cache.keys(), ...store.listGuildIds()]);
   for (const id of ids) {
     await store.load(id).catch(() => null);
@@ -443,6 +483,7 @@ client.on('warn', (message) => logger.debug('[discord] ' + message));
 async function shutdown(signal) {
   logger.info('[bot] ' + signal + ' received, shutting down');
   presence.stop();
+  await health.stop().catch(() => {});
   await servers.stopAll().catch(() => {});
   await client.destroy().catch(() => {});
   process.exit(0);
