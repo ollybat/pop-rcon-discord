@@ -4,6 +4,18 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1]
+
+`!pop` is the headline command.
+
+### Changed
+
+- `/help`, the welcome message and the README now show the **prefix form first** — `!pop`,
+  `!status`, `!players`, `!kick` … — with the slash twin named as the alternative, and `!pop` is
+  described as the normal way to ask for the population.
+- The `!` form and `/pop` share one implementation, so the buttons, the peak line and the
+  multi-server summary are identical either way: `!pop`, `!pop 2`, `!pop all`, `!pop 2 off`.
+
 ## [0.5.0]
 
 Making setup one click and /pop alive.
