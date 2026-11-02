@@ -11,15 +11,16 @@ import { errorEmbed, hintEmbed, welcomeEmbed } from './embeds.js';
 import { handlePopComponent } from './pop.js';
 import { handleSetupComponent, handleSetupModal } from './setup/index.js';
 import { parsePrefixCommand } from './prefix.js';
+import { createDmRelay } from './dms.js';
 import { createHealthServer } from './web.js';
 import { BRAND, COLORS } from './theme.js';
 
 const logger = createLogger({ level: config.log.level, timestamps: config.log.timestamps });
 
 const intents = [GatewayIntentBits.Guilds];
-if (config.discord.prefixCommandsEnabled) {
-  // Only needed for the !prefix commands in the .env config.
-  intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
+if (config.discord.prefixCommandsEnabled || config.dm.enabled) {
+  // Prefix commands and direct messages both need the message intents.
+  intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.DirectMessages, GatewayIntentBits.MessageContent);
 }
 
 const client = new Client({ intents, partials: [Partials.Channel] });
@@ -28,6 +29,21 @@ const store = new GuildStore({ dir: config.data.dir, logger });
 const logs = new LogRouter({ client, store, logger });
 
 const relay = new ChannelRelay({ client, channelId: config.log.chatChannelId, logger });
+
+const dms = createDmRelay({
+  client,
+  store,
+  logs,
+  logger,
+  options: {
+    enabled: config.dm.enabled,
+    botOwnerIds: config.discord.botOwnerIds,
+    forwardIds: config.dm.forwardIds,
+    forwardStrangers: config.dm.forwardStrangers,
+    autoReplyCooldownMs: config.dm.replyCooldownSeconds * 1000,
+    prefix: config.discord.prefix,
+  },
+});
 
 const servers = new ServerManager({
   store,
@@ -303,6 +319,23 @@ async function runCommand(command, options) {
 }
 
 client.on('interactionCreate', async (interaction) => {
+  // Slash commands are guild-only: in a DM, say where to use them instead of failing quietly.
+  if (!interaction.guildId && interaction.isChatInputCommand?.()) {
+    await interaction
+      .reply({
+        embeds: [
+          hintEmbed(
+            '🏠 Use this inside a server',
+            '**/' + interaction.commandName + '** works in a Discord server, not in a direct message.\n' +
+              'Open the ' + BRAND.name + ' server, or just write here and I will pass your message to the owners.',
+          ),
+        ],
+        flags: MessageFlags.Ephemeral,
+      })
+      .catch(() => {});
+    return;
+  }
+
   const ctx = { store, servers, logs, logger, botOwnerIds: config.discord.botOwnerIds, brand: BRAND.name };
 
   try {
@@ -355,8 +388,15 @@ client.on('interactionCreate', async (interaction) => {
 
 client.on('messageCreate', async (message) => {
   try {
+    if (!message.author || message.author.bot) return;
+
+    // Direct messages: answer the sender and pass the message to the clan owners.
+    if (!message.guild) {
+      await dms.handle(message);
+      return;
+    }
+
     if (!config.discord.prefixCommandsEnabled) return;
-    if (!message.guild || !message.author || message.author.bot) return;
 
     const parsed = parsePrefixCommand(message.content, config.discord.prefix);
     if (!parsed) return;
