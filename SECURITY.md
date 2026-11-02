@@ -1,21 +1,24 @@
-# Security Policy
+# Security
 
-## Supported Versions
+## Reporting a problem
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Open a private security advisory on GitHub (<https://github.com/ollybat/pop-rcon-discord/security/advisories/new>)
+rather than a public issue, and include the version, the configuration (with secrets masked) and
+the steps to reproduce.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+## Secrets
 
-## Reporting a Vulnerability
+- `.env` holds the Discord bot token and the RCON password. It is git-ignored - keep it that way.
+- `npm run doctor` masks the token and password, but log output can still be sensitive; do not post
+  raw console logs publicly without checking them first.
+- Rotate the RCON password with `+rcon.password` and reset the bot token in the Discord developer
+  portal if either leaks.
 
-Use this section to tell people how to report a vulnerability.
+## Exposure
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+- WebRCON is an unauthenticated-by-port plain websocket: anyone who can reach the port and knows the
+  password can run console commands. Bind it to the bot's address (firewall) or keep the bot on the
+  same host or LAN.
+- Give the bot the minimum Discord permissions: `View Channels`, `Send Messages`, `Embed Links`.
+- The bot only reads from the RCON socket and posts to the configured channel; it never accepts
+  commands from Discord.
