@@ -1,0 +1,21 @@
+[Unit]
+Description=pop-rcon-discord - Rust WebRCON status bot for Discord
+Documentation=https://github.com/ollybat/pop-rcon-discord
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=rustbot
+Group=rustbot
+WorkingDirectory=/opt/pop-rcon-discord
+EnvironmentFile=/opt/pop-rcon-discord/.env
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
