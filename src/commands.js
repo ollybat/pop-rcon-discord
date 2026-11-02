@@ -1,19 +1,23 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { COLORS, TIERS, tierById } from './theme.js';
-import { baseEmbed, boardEmbed, helpEmbed, playerLines, popSetupHintEmbed, statusEmbed } from './embeds.js';
+import { baseEmbed } from './embeds.js';
 import { popPayload, popPlaceholder } from './pop.js';
-import { codeBlock, duration, quoteArgument } from './format.js';
 import { canRun } from './permissions.js';
-import { effectiveServers } from './servers.js';
 
 /**
- * Every command the bot serves, in both /slash and !prefix form.
- * minTier: null means anybody. "owner" means the Discord server owner (or the bot owner).
+ * The bot serves exactly two commands.
+ *
+ *   /setup  — the setup panel, for the Discord server owner and the bot owner only.
+ *   !pop    — the headline command, open to everybody, in prefix form.
+ *
+ * Everything else (staff tools, logs, the record book) is served through the setup panel,
+ * its buttons and the status line, so the slash menu stays short and obvious.
  */
 export const commands = [
   {
     name: 'setup',
     description: 'Open the setup panel (server owner only)',
+    prefixUsage: null,
     minTier: null,
     ownerOnly: true,
     slashOnly: true,
@@ -30,6 +34,7 @@ export const commands = [
     description: 'Show who is playing right now',
     prefixUsage: '!pop [slot]',
     minTier: null,
+    prefixOnly: true,
     data: new SlashCommandBuilder()
       .setName('pop')
       .setDescription('Show who is playing right now')
@@ -52,187 +57,16 @@ export const commands = [
       await ctx.invoker.edit(popPayload({ snapshots, config: ctx.guildConfig, showPlayers, focus: slot }));
     },
   },
-  {
-    name: 'status',
-    description: 'Are the servers reachable, and how busy was today',
-    prefixUsage: '!status',
-    minTier: null,
-    data: new SlashCommandBuilder().setName('status').setDescription('Are the servers reachable, and how busy was today'),
-    async run(ctx) {
-      await ctx.invoker.defer();
-      const snapshots = await ctx.servers.refreshGuild(ctx.guild.id);
-      await ctx.invoker.edit({ embeds: [statusEmbed({ snapshots, config: ctx.guildConfig, guild: ctx.guild })] });
-    },
-  },
-  {
-    name: 'board',
-    description: 'The busiest days this server has seen',
-    prefixUsage: '!board',
-    minTier: null,
-    data: new SlashCommandBuilder().setName('board').setDescription('The busiest days this server has seen'),
-    async run(ctx) {
-      await ctx.invoker.defer();
-      const snapshots = ctx.servers.snapshots(ctx.guild.id);
-      await ctx.invoker.edit({ embeds: [boardEmbed({ config: ctx.guildConfig, snapshots })] });
-    },
-  },
-  {
-    name: 'help',
-    description: 'What I can do and who can use it',
-    prefixUsage: '!help',
-    minTier: null,
-    data: new SlashCommandBuilder().setName('help').setDescription('What I can do and who can use it'),
-    async run(ctx) {
-      await ctx.invoker.reply({
-        embeds: [helpEmbed({ prefix: ctx.prefix, prefixEnabled: ctx.prefixEnabled, config: ctx.guildConfig })],
-      });
-    },
-  },
-  {
-    name: 'players',
-    description: 'Detailed player list for one server',
-    prefixUsage: '!players [slot]',
-    minTier: 'moderator',
-    data: new SlashCommandBuilder()
-      .setName('players')
-      .setDescription('Detailed player list for one server')
-      .addIntegerOption((option) => option.setName('server').setDescription('Server slot (1-3)').setMinValue(1).setMaxValue(3).setRequired(false)),
-    async run(ctx) {
-      const slot = ctx.options.integer('server') ?? ctx.slot;
-      await ctx.invoker.defer();
-      const snapshots = await ctx.servers.refreshGuild(ctx.guild.id, slot);
-      const snapshot = snapshots[0] ?? ctx.servers.snapshot(ctx.guild.id, slot);
-
-      if (!snapshot) {
-        await ctx.invoker.edit({ embeds: [popSetupHintEmbed()] });
-        return;
-      }
-
-      const title = snapshot.info
-        ? '👥 ' + snapshot.name + ' — ' + snapshot.info.players + '/' + snapshot.info.max
-        : '👥 ' + snapshot.name;
-
-      const embed = baseEmbed({
-        color: snapshot.connected ? COLORS.brand : COLORS.danger,
-        footer: 'RCON ' + (snapshot.latencyMs === null ? '—' : snapshot.latencyMs + 'ms'),
-      })
-        .setTitle(title)
-        .addFields(...playerLines(snapshot.players, 10, 3));
-
-      if (snapshot.info) {
-        embed.addFields(
-          { name: 'Queue', value: String(snapshot.info.queued), inline: true },
-          { name: 'Uptime', value: duration(snapshot.info.uptime), inline: true },
-          { name: 'Hostname', value: snapshot.info.hostname, inline: true },
-        );
-      }
-
-      await ctx.invoker.edit({ embeds: [embed] });
-    },
-  },
-  {
-    name: 'say',
-    description: 'Say something in the Rust global chat',
-    prefixUsage: '!say <message>',
-    minTier: 'admin',
-    data: new SlashCommandBuilder()
-      .setName('say')
-      .setDescription('Say something in the Rust global chat')
-      .addStringOption((option) => option.setName('message').setDescription('What to broadcast').setMaxLength(200).setRequired(true))
-      .addIntegerOption((option) => option.setName('server').setDescription('Server slot (1-3)').setMinValue(1).setMaxValue(3).setRequired(false)),
-    async run(ctx) {
-      await ctx.invoker.defer();
-      const message = ctx.options.string('message') ?? ctx.args.join(' ');
-      const reply = await ctx.servers.query(ctx.guild.id, ctx.options.integer('server') ?? ctx.slot, 'say ' + quoteArgument(message));
-      await ctx.invoker.edit({ embeds: [okEmbed('📢 Sent to chat', '**' + message + '**', reply)] });
-    },
-  },
-  {
-    name: 'kick',
-    description: 'Kick a player from the server',
-    prefixUsage: '!kick <player> [reason]',
-    minTier: 'admin',
-    data: new SlashCommandBuilder()
-      .setName('kick')
-      .setDescription('Kick a player from the server')
-      .addStringOption((option) => option.setName('player').setDescription('SteamID or display name').setRequired(true))
-      .addStringOption((option) => option.setName('reason').setDescription('Reason shown to the player').setMaxLength(150).setRequired(false))
-      .addIntegerOption((option) => option.setName('server').setDescription('Server slot (1-3)').setMinValue(1).setMaxValue(3).setRequired(false)),
-    async run(ctx) {
-      await ctx.invoker.defer();
-      const player = ctx.options.string('player') ?? ctx.args[0];
-      const reason = ctx.options.string('reason') ?? ctx.args.slice(1).join(' ') ?? 'Kicked by staff';
-      const reply = await ctx.servers.query(ctx.guild.id, ctx.options.integer('server') ?? ctx.slot, 'kick ' + quoteArgument(player) + ' ' + quoteArgument(reason));
-      await ctx.invoker.edit({ embeds: [okEmbed('👢 Kicked', '**' + player + '** — ' + reason, reply)] });
-    },
-  },
-  {
-    name: 'save',
-    description: 'Ask the Rust server to save the world',
-    prefixUsage: '!save [slot]',
-    minTier: 'admin',
-    data: new SlashCommandBuilder()
-      .setName('save')
-      .setDescription('Ask the Rust server to save the world (RCON server.save)')
-      .addIntegerOption((option) => option.setName('server').setDescription('Server slot (1-3)').setMinValue(1).setMaxValue(3).setRequired(false)),
-    async run(ctx) {
-      await ctx.invoker.defer();
-      const slot = ctx.options.integer('server') ?? ctx.slot;
-      const reply = await ctx.servers.query(ctx.guild.id, slot, 'server.save');
-      await ctx.invoker.edit({ embeds: [okEmbed('💾 Save requested', 'Server ' + slot + ' was asked to save the world.', reply)] });
-    },
-  },
-  {
-    name: 'ban',
-    description: 'Ban a player from the server',
-    prefixUsage: '!ban <player> [reason]',
-    minTier: 'headAdmin',
-    data: new SlashCommandBuilder()
-      .setName('ban')
-      .setDescription('Ban a player from the server')
-      .addStringOption((option) => option.setName('player').setDescription('SteamID or display name').setRequired(true))
-      .addStringOption((option) => option.setName('reason').setDescription('Reason shown to the player').setMaxLength(150).setRequired(false))
-      .addIntegerOption((option) => option.setName('server').setDescription('Server slot (1-3)').setMinValue(1).setMaxValue(3).setRequired(false)),
-    async run(ctx) {
-      await ctx.invoker.defer();
-      const player = ctx.options.string('player') ?? ctx.args[0];
-      const reason = ctx.options.string('reason') ?? ctx.args.slice(1).join(' ') ?? 'Banned by staff';
-      const reply = await ctx.servers.query(ctx.guild.id, ctx.options.integer('server') ?? ctx.slot, 'ban ' + quoteArgument(player) + ' ' + quoteArgument(reason));
-      await ctx.invoker.edit({ embeds: [okEmbed('🔨 Banned', '**' + player + '** — ' + reason, reply)] });
-    },
-  },
-  {
-    name: 'console',
-    description: 'Send a raw RCON command',
-    prefixUsage: '!console <command>',
-    minTier: 'coOwner',
-    data: new SlashCommandBuilder()
-      .setName('console')
-      .setDescription('Send a raw RCON command')
-      .addStringOption((option) => option.setName('command').setDescription('The exact RCON command').setRequired(true))
-      .addIntegerOption((option) => option.setName('server').setDescription('Server slot (1-3)').setMinValue(1).setMaxValue(3).setRequired(false)),
-    async run(ctx) {
-      await ctx.invoker.defer();
-      const line = ctx.options.string('command') ?? ctx.args.join(' ');
-      const reply = await ctx.servers.query(ctx.guild.id, ctx.options.integer('server') ?? ctx.slot, line);
-      await ctx.invoker.edit({ embeds: [okEmbed('🖥️ RCON', line, reply?.message ?? null)] });
-    },
-  },
 ];
-
-function okEmbed(title, description, reply = null) {
-  const embed = baseEmbed({ color: COLORS.success }).setTitle(title).setDescription(description);
-  if (reply?.message) embed.addFields({ name: 'Server said', value: codeBlock(reply.message, 900), inline: false });
-  return embed;
-}
 
 export function commandByName(name) {
   const wanted = String(name ?? '').toLowerCase();
   return commands.find((command) => command.name === wanted) ?? null;
 }
 
+/** The slash commands Discord should know about: only /setup. */
 export function slashCommandData() {
-  return commands.map((command) => command.data.toJSON());
+  return commands.filter((command) => !command.prefixOnly).map((command) => command.data.toJSON());
 }
 
 /** Which server slot a guild command should talk to by default. */

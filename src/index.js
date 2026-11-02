@@ -308,7 +308,7 @@ client.on('messageCreate', async (message) => {
             hintEmbed(
               'Use the slash version',
               '**/setup** is a slash command — start typing `/setup` and pick it from the menu.\n' +
-                'Everything else works with `' + config.discord.prefix + 'pop`, `' + config.discord.prefix + 'status` and `' + config.discord.prefix + 'help`.',
+                'Everybody else just needs `' + config.discord.prefix + 'pop`.',
             ),
           ],
         })
@@ -385,12 +385,21 @@ async function registerCommands() {
     if (config.discord.guildId) {
       const guild = await client.guilds.fetch(config.discord.guildId);
       await guild.commands.set(body);
-      logger.info('[commands] registered ' + body.length + ' commands in guild ' + config.discord.guildId);
+      // Also empty the global scope: a stale global copy of the same command is what makes
+      // Discord show two entries with the same name in the picker.
+      await client.application.commands.set([]);
+      logger.info('[commands] registered ' + body.length + ' command(s) in guild ' + config.discord.guildId);
       return;
     }
 
     await client.application.commands.set(body);
-    logger.info('[commands] registered ' + body.length + ' global commands');
+
+    // No guild pin: clear the guild scope everywhere so no stale duplicate is left behind.
+    for (const guild of client.guilds.cache.values()) {
+      await guild.commands.set([]).catch(() => null);
+    }
+
+    logger.info('[commands] registered ' + body.length + ' global command(s)');
   } catch (error) {
     logger.error('[commands] registration failed: ' + error.message);
   }
