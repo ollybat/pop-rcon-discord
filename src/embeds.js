@@ -1,7 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import { bar, clock, duration, maskPassword, plural, truncate } from './format.js';
 import { BRAND, COLORS, EMOJI, LOG_KINDS, STATUS, TIERS, footerText, tierById } from './theme.js';
-import { MAX_SERVERS, describeConfig, peakFor } from './store.js';
+import { HISTORY_DAYS, MAX_SERVERS, bestFor, configuredServers, describeConfig, peakFor, topDays } from './store.js';
 
 export function baseEmbed({ color = COLORS.brand, footer = null } = {}) {
   return new EmbedBuilder().setColor(color).setFooter({ text: footerText(footer) });
@@ -392,6 +392,7 @@ export function helpEmbed({ prefix = '!', prefixEnabled = true, config = null })
     '**Everyone**',
     both('pop') + ' — who is online right now, with buttons to switch server, refresh and hide the list',
     both('status') + ' — is every server reachable, plus the peak of the day',
+    both('board') + ' — the record book: the busiest days this server has seen',
     both('help') + ' — this message',
     '',
     '**🔨 Moderator and up**',
@@ -400,6 +401,7 @@ export function helpEmbed({ prefix = '!', prefixEnabled = true, config = null })
     '**🔧 Admin and up**',
     both('say') + ' — broadcast to in-game chat',
     both('kick') + ' — kick a player',
+    both('save') + ' — ask the server to save the world',
     '',
     '**⚔️ Head Admin and up**',
     both('ban') + ' — ban a player',
@@ -429,6 +431,43 @@ export function helpEmbed({ prefix = '!', prefixEnabled = true, config = null })
     embed.addFields({
       name: 'Prefer slash commands?',
       value: 'Every command above also exists as \`/pop\`, \`/status\`, \`/players\`, \`/say\`, \`/kick\`, \`/ban\` and \`/console\`.',
+      inline: false,
+    });
+  }
+
+  return embed;
+}
+
+/** The clan record book: best day, today and the busiest days per server. */
+export function boardEmbed({ config, snapshots = [] }) {
+  const servers = configuredServers(config);
+  if (servers.length === 0) {
+    return baseEmbed({ color: COLORS.warning })
+      .setTitle('📈 No records yet')
+      .setDescription('Run **/setup** and add a Rust server - from then on I keep the busiest moment of every day.');
+  }
+
+  const maxBySlot = new Map(snapshots.map((snapshot) => [snapshot.slot, snapshot.info?.max ?? null]));
+
+  const embed = baseEmbed({ footer: 'One peak per UTC day · the last ' + HISTORY_DAYS + ' days' })
+    .setTitle('📈 ' + BRAND.name + ' record book')
+    .setDescription('The busiest moment of the day, measured on every poll.');
+
+  for (const server of servers) {
+    const max = maxBySlot.get(server.slot) ?? null;
+    const total = max ? '/' + max : '';
+    const best = bestFor(config, server.slot);
+    const today = peakFor(config, server.slot);
+    const top = topDays(config, server.slot, 5);
+
+    const lines = [];
+    lines.push(best && best.peak ? '👑 Best day: **' + best.peak + total + '**' + (best.day ? ' on ' + best.day : '') : '👑 Best day: nothing recorded yet');
+    lines.push(today && today.peak ? '📅 Today: **' + today.peak + total + '**' + (today.at ? ' at ' + clock(today.at) : '') : '📅 Today: nobody has been on yet');
+    if (top.length > 1) lines.push('🏆 Busiest: ' + top.map((day) => day.day.slice(5) + ' → **' + day.peak + '**').join(' · '));
+
+    embed.addFields({
+      name: String(server.slot) + '. ' + (server.name || server.host),
+      value: truncate(lines.join('\n'), 1000),
       inline: false,
     });
   }
