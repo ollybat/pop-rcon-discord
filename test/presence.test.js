@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ActivityType } from 'discord.js';
-import { PresenceManager, STATE, formatPresence, normalizeServerInfo, presenceFor } from '../src/presence.js';
+import { PresenceManager, STATE, aggregateInfos, formatPresence, normalizeServerInfo, presenceFor } from '../src/presence.js';
 
 const silentLogger = { info() {}, warn() {} };
 
@@ -26,10 +26,15 @@ test('formatPresence replaces known placeholders and keeps unknown ones', () => 
 
 test('normalizeServerInfo fills in the fields the server omits', () => {
   assert.equal(normalizeServerInfo(null), null);
-  assert.deepEqual(
-    normalizeServerInfo({ Players: 5, MaxPlayers: 100, Queued: 2, Joining: 1, Restarting: true, Server: 'POP' }),
-    { players: 5, max: 100, queued: 2, joining: 1, uptime: null, restarting: true, hostname: 'POP' },
-  );
+  assert.deepEqual(normalizeServerInfo({ Players: 5, MaxPlayers: 100, Queued: 2, Joining: 1, Restarting: true, Server: 'POP' }), {
+    players: 5,
+    max: 100,
+    queued: 2,
+    joining: 1,
+    uptime: null,
+    restarting: true,
+    hostname: 'POP',
+  });
 });
 
 test('presenceFor reports each of the three states', () => {
@@ -44,14 +49,11 @@ test('presenceFor reports each of the three states', () => {
   assert.equal(offline.state, STATE.OFFLINE);
   assert.equal(offline.text, '🔴 RCON┆OFFLINE');
 
-  const resting = presenceFor(
-    { connected: true, reconnecting: false, info: { players: 1, max: 100, restarting: true } },
-    options,
-  );
+  const resting = presenceFor({ connected: true, reconnecting: false, info: { players: 1, max: 100, restarting: true } }, options);
   assert.equal(resting.state, STATE.RESTING);
   assert.equal(resting.text, '🟡 RCON┆RESTING');
 
-  // connected, but the server never answered serverinfo: no counts to show
+  // Connected, but the server never answered serverinfo: there are no counts to show.
   assert.equal(presenceFor({ connected: true, reconnecting: false, info: null }, options).state, STATE.OFFLINE);
 });
 
@@ -60,24 +62,29 @@ test('restingOnReconnect shows the yellow state while the client backs off', () 
   assert.equal(result.state, STATE.RESTING);
 });
 
+test('aggregateInfos adds every online server together', () => {
+  const infos = aggregateInfos([
+    { connected: true, info: { players: 3, max: 100, queued: 1, joining: 0, uptime: 900, restarting: false, hostname: 'A' } },
+    { connected: true, info: { players: 4, max: 200, queued: 0, joining: 2, uptime: 300, restarting: false, hostname: 'B' } },
+    { connected: false, info: null },
+  ]);
+
+  assert.equal(infos.players, 7);
+  assert.equal(infos.max, 300);
+  assert.equal(infos.queued, 1);
+  assert.equal(infos.joining, 2);
+  assert.equal(infos.uptime, 300);
+  assert.equal(infos.servers, 2);
+  assert.equal(aggregateInfos([]), null);
+  assert.equal(aggregateInfos([{ connected: false, info: null }]), null);
+});
+
 test('PresenceManager pushes a Watching activity and only re-pushes on change', async () => {
   const applied = [];
   const client = { user: { setPresence: (payload) => applied.push(payload) } };
-  const listeners = {};
-  const rcon = {
-    connected: false,
-    reconnectAttempts: 0,
-    reconnectTimer: null,
-    on(event, handler) {
-      listeners[event] = handler;
-    },
-    async sendJson(command) {
-      assert.equal(command, 'serverinfo');
-      return { data: { Players: 4, MaxPlayers: 100, Queued: 0, Joining: 0, Server: 'POP' } };
-    },
-  };
 
-  const manager = new PresenceManager({ client, rcon, options, logger: silentLogger });
+  let snapshot = { connected: false, reconnecting: false, info: null };
+  const manager = new PresenceManager({ client, provider: async () => snapshot, options, logger: silentLogger });
 
   await manager.refresh();
   assert.equal(manager.state, STATE.OFFLINE);
@@ -86,7 +93,7 @@ test('PresenceManager pushes a Watching activity and only re-pushes on change', 
     status: 'dnd',
   });
 
-  rcon.connected = true;
+  snapshot = { connected: true, reconnecting: false, info: { players: 4, max: 100, queued: 0, joining: 0, restarting: false } };
   await manager.refresh();
   assert.equal(manager.state, STATE.ONLINE);
   assert.equal(applied.at(-1).activities[0].name, '🟢 RCON┆👥  4/100 ⏳0/0');
@@ -96,8 +103,28 @@ test('PresenceManager pushes a Watching activity and only re-pushes on change', 
   await manager.refresh();
   assert.equal(applied.length, pushes, 'an unchanged state must not be re-pushed');
 
-  rcon.connected = false;
+  snapshot = { connected: true, reconnecting: false, info: { players: 5, max: 100, queued: 0, joining: 0, restarting: false } };
+  await manager.refresh();
+  assert.equal(applied.length, pushes + 1, 'a changed player count is a new activity name');
+
+  snapshot = { connected: false, reconnecting: false, info: null };
   await manager.refresh();
   assert.equal(manager.state, STATE.OFFLINE);
-  assert.equal(applied.length, pushes + 1);
+});
+
+test('PresenceManager survives a provider that throws', async () => {
+  const applied = [];
+  const client = { user: { setPresence: (payload) => applied.push(payload) } };
+  const manager = new PresenceManager({
+    client,
+    provider: async () => {
+      throw new Error('socket exploded');
+    },
+    options,
+    logger: silentLogger,
+  });
+
+  await manager.refresh();
+  assert.equal(manager.state, STATE.OFFLINE);
+  assert.equal(applied.length, 1);
 });
