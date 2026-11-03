@@ -568,7 +568,7 @@ test('playerLine condenses a roster into one readable line', () => {
   assert.match(line, /\u2728\*\*alpha\*\*/, 'a newcomer keeps the sparkle');
   assert.match(line, /\u{1F534}/u, 'a struggling connection is flagged');
   assert.ok(!line.includes('\u{1F7E2}'), 'the everyday green dots are the noise that goes');
-  assert.match(line, /\(2h\)/, 'and everyone keeps their session length');
+  assert.match(line, /\(2h 0m\)/, 'everyone keeps their session length, even the tidy form');
 
   const long = playerLine(Array.from({ length: 40 }, (_, i) => ({ id: 'p' + i, name: 'player' + i, seconds: 60 })), { limit: 5 });
   assert.match(long, /and 35 more/);

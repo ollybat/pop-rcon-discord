@@ -233,7 +233,8 @@ test('the compact answer leaves out what is not there', () => {
 });
 
 test('a server with no readings yet still gets a tidy compact answer', () => {
-  const data = popPayload({ snapshots: [richSnapshot(1, 4, [])], config: emptyGuildConfig('g'), details: false, guildId: 'g' }).embeds[0].data;
+  // A guild nothing has polled yet: history is per guild, and this one is brand new.
+  const data = popPayload({ snapshots: [richSnapshot(1, 4, [])], config: emptyGuildConfig('fresh-guild'), details: false, guildId: 'fresh-guild' }).embeds[0].data;
   assert.ok(!data.fields.some((field) => field.name.includes('Trend')), 'no history, no chart');
   assert.match(data.fields[0].value, /[\u2588\u2591]/);
 });
