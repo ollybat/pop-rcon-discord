@@ -355,7 +355,10 @@ function popServerEmbedBase(snapshot, { showPlayers = true, peak = null, guildId
     const notes = [];
     if (average !== null) notes.push('averaging ' + average);
     notes.push('last ' + series.length + ' readings');
-    if (busiest) notes.push('busiest ' + busiest.players + ' at ' + shortTime(busiest.at));
+    if (busiest) {
+      const when = shortTime(busiest.at);
+      notes.push('busiest ' + busiest.players + (when && when !== '—' ? ' at ' + when : ''));
+    }
     parts.push('**' + (values[values.length - 1] ?? 0) + ' now** · ' + notes.join(' · '));
     embed.addFields({ name: '📈 Trend', value: parts.join('\n'), inline: false });
   }
