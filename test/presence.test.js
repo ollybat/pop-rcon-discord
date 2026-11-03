@@ -141,7 +141,7 @@ test('PresenceManager survives a provider that throws', async () => {
   assert.equal(applied.length, 1);
 });
 
-test('while the server is online the activity line rotates through its frames', () => {
+test('while the server is online the activity line rotates through its frames', async () => {
   const applied = [];
   const manager = new PresenceManager({
     client: { user: { setActivity: (activity) => applied.push(activity), setPresence() {} } },
@@ -165,7 +165,7 @@ test('while the server is online the activity line rotates through its frames', 
   assert.equal(names[3], '👥 7/100', 'it wraps around');
 });
 
-test('an offline server keeps its offline line instead of rotating', () => {
+test('an offline server keeps its offline line instead of rotating', async () => {
   const applied = [];
   const manager = new PresenceManager({
     client: { user: { setActivity: (activity) => applied.push(activity), setPresence() {} } },

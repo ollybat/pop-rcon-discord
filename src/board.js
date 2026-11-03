@@ -173,6 +173,9 @@ export function createBoardManager({
       return next;
     }).catch(() => null);
 
+    // Remember what was just posted, so the next pass does not edit it for nothing.
+    last.set(address(fresh.board.channelId, posted.message.id), { key: snapshotKey, at: now() });
+
     return { ok: true, reason: 'posted' };
   }
 
