@@ -202,7 +202,17 @@ function pingBadgeFor(ping) {
  * One server, in full: how full it is, which way it is moving, what it is running and who is on
  * it. `guildId` turns on the recent-history half (trend, shape, average, newcomers).
  */
-export function popServerEmbed(snapshot, { showPlayers = true, peak = null, guildId = null, compact = false } = {}) {
+/**
+ * Adds the small "this message is alive" line to an embed. Kept apart from the layout so both
+ * the summary and a single server embed can carry it without repeating the wording.
+ */
+export function withNote(embed, note) {
+  if (!note) return embed;
+  const current = embed.data?.description ?? null;
+  return embed.setDescription(truncate(current ? current + '\n\n' + note : note, 4096));
+}
+
+function popServerEmbedBase(snapshot, { showPlayers = true, peak = null, guildId = null, compact = false } = {}) {
   const state = snapshot.connected ? (snapshot.info?.restarting ? 'resting' : 'online') : 'offline';
   const status = STATUS[state];
   const info = snapshot.info;
@@ -276,7 +286,7 @@ export function popServerEmbed(snapshot, { showPlayers = true, peak = null, guil
  * The multi-server answer: one headline number, one line per server (counts, bar, direction) and
  * the busiest moment of the day when the guild config knows it.
  */
-export function popSummaryEmbed({
+export function popSummaryEmbedBase({
   totalPlayers,
   totalMax,
   onlineServers,
@@ -335,6 +345,15 @@ export function popSummaryEmbed({
   }
 
   return embed;
+}
+/** A single server's answer. */
+export function popServerEmbed(snapshot, options = {}) {
+  return withNote(popServerEmbedBase(snapshot, options), options.note);
+}
+
+/** The all-servers answer. */
+export function popSummaryEmbed(options = {}) {
+  return withNote(popSummaryEmbedBase(options), options.note);
 }
 export function popSetupHintEmbed() {
   return baseEmbed({ color: COLORS.warning })

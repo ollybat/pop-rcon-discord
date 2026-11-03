@@ -1,7 +1,7 @@
 import { ChannelType, Client, GatewayIntentBits, MessageFlags, Partials } from 'discord.js';
 import { config, presenceSlot } from './config.js';
 import { createLogger } from './logger.js';
-import { GuildStore, configuredServers, recordPeak } from './store.js';
+import { GuildStore, configuredServers, peakFor, recordPeak } from './store.js';
 import { LogRouter } from './logs.js';
 import { ChannelRelay } from './relay.js';
 import { PresenceManager, aggregateInfos } from './presence.js';
@@ -17,6 +17,7 @@ import { welcomeOwner } from './onboarding.js';
 import { parsePrefixCommand } from './prefix.js';
 import { createDmRelay } from './dms.js';
 import { createHealthServer } from './web.js';
+import { createBoardManager } from './board.js';
 import { BRAND, COLORS } from './theme.js';
 
 const logger = createLogger({ level: config.log.level, timestamps: config.log.timestamps });
@@ -65,6 +66,18 @@ const servers = new ServerManager({
       message: error.message,
       context: error.source,
     }),
+});
+
+// The live population board: one message per server, kept up to date, plus any /pop answer
+// somebody marked live. Sharing the poll interval keeps it cheap and rate-limit safe.
+const board = createBoardManager({
+  client,
+  store,
+  servers,
+  logger,
+  intervalSeconds: config.board.intervalSeconds,
+  forceSeconds: config.board.forceSeconds,
+  liveMinutes: config.board.liveMinutes,
 });
 
 const startedAt = Date.now();
@@ -119,6 +132,10 @@ const presence = new PresenceManager({
     enabled: config.presence.enabled,
     intervalSeconds: config.poll.intervalSeconds,
     restingOnReconnect: config.presence.restingOnReconnect,
+    // While the server is online the line cycles: population, then queue/uptime, then the day's peak.
+    rotateFrames: config.presence.rotate
+      ? [config.presence.formats.online, '⏳ {queued} queued · 🕒 {uptime}', '🥇 {peak} peak today · 🕒 {uptime}']
+      : null,
     formats: {
       online: config.presence.formats.online,
       offline: config.presence.formats.offline,
@@ -146,19 +163,91 @@ function reportChanges(guildId, changes) {
   for (const player of changes.left) logs.joinLeave(guildId, { ...base, type: 'leave', player, sessionSeconds: player.sessionSeconds });
 }
 
+/** Milestone announcements, so a record or a full server is noticed without anyone asking. */
+const milestones = { peakAt: new Map(), full: new Map(), queue: new Map() };
+
+function alertGuild(guildId, payload) {
+  const guildConfig = store.get(guildId);
+  if (!guildConfig || guildConfig.alerts?.enabled === false) return null;
+  // Milestones go where the server status goes: no status channel, nothing to interrupt.
+  if (!guildConfig.logs?.status) return null;
+  return logs.status(guildId, payload);
+}
+
+function announcePeak(guildId, snapshot, before) {
+  const info = snapshot.info;
+  if (!info || info.players < 5) return;
+
+  const oldPeak = before && before.peak ? before.peak : 0;
+  // The first reading of the day is not news, and neither is a spike every few minutes.
+  if (oldPeak < 5 || info.players <= oldPeak) return;
+
+  const key = guildId + ':' + snapshot.slot;
+  const at = Date.now();
+  if (at - (milestones.peakAt.get(key) ?? 0) < 10 * 60 * 1000) return;
+  milestones.peakAt.set(key, at);
+
+  alertGuild(guildId, {
+    title: '🥇 New record for today — ' + info.players + ' players on ' + snapshot.name,
+    description:
+      'That beats the best of ' +
+      oldPeak +
+      '. `/ping` has the shape of the day, `/pop` the live count.',
+    color: COLORS.success,
+  });
+}
+
+function announceCrowd(guildId, snapshot) {
+  const info = snapshot.info;
+  if (!info) return;
+
+  const fullKey = guildId + ':' + snapshot.slot + ':full';
+  const queueKey = guildId + ':' + snapshot.slot + ':queue';
+  const full = info.max > 0 && info.players >= info.max;
+  const queued = Number(info.queued) > 0;
+
+  if (full && !milestones.full.has(fullKey)) {
+    milestones.full.set(fullKey, true);
+    alertGuild(guildId, {
+      title: '🔥 ' + snapshot.name + ' is full — ' + info.players + '/' + info.max,
+      description: 'Every slot is taken, so new arrivals will queue. `/pop` shows the count live.',
+      color: COLORS.warning,
+    });
+  }
+  if (!full) milestones.full.delete(fullKey);
+
+  if (queued && !milestones.queue.has(queueKey)) {
+    milestones.queue.set(queueKey, true);
+    alertGuild(guildId, {
+      title: '⏳ The queue is moving — ' + info.queued + ' waiting for ' + snapshot.name,
+      description: 'A slot opened up. `/pop` is live if you want to watch it.',
+      color: COLORS.brand,
+    });
+  }
+  if (!queued) milestones.queue.delete(queueKey);
+}
+
 /** Keep the busiest moment of the day per server, and write to disk only on a new peak. */
 async function recordSnapshot(guildId, snapshot) {
   try {
     if (!snapshot || !snapshot.connected || !snapshot.info) return;
 
+    const before = peakFor(store.get(guildId), snapshot.slot);
     const probe = JSON.parse(JSON.stringify(store.get(guildId)));
-    if (!recordPeak(probe, snapshot.slot, snapshot.info.players)) return;
-    stats.inc('peaks');
+    const isPeak = recordPeak(probe, snapshot.slot, snapshot.info.players);
 
-    await store.update(guildId, (next) => {
-      recordPeak(next, snapshot.slot, snapshot.info.players);
-      return next;
-    });
+    if (isPeak) {
+      stats.inc('peaks');
+
+      await store.update(guildId, (next) => {
+        recordPeak(next, snapshot.slot, snapshot.info.players);
+        return next;
+      });
+
+      announcePeak(guildId, snapshot, before);
+    }
+
+    announceCrowd(guildId, snapshot);
   } catch (error) {
     logger.warn('[peaks] ' + (error && error.message ? error.message : error));
   }
@@ -209,12 +298,20 @@ async function presenceProvider() {
   const connected = snapshots.some((snapshot) => snapshot.connected);
   const reconnecting = targets.some((monitor) => Boolean(monitor.rcon.reconnectTimer) || monitor.rcon.reconnectAttempts > 0);
 
+  const peakOf = (snapshot) => {
+    const stored = peakFor(store.get(guildId), snapshot.slot);
+    return stored && stored.peak ? stored.peak : null;
+  };
+
   if (wanted === 'all') {
-    return { connected, reconnecting, info: connected ? aggregateInfos(snapshots) : null };
+    const info = connected ? aggregateInfos(snapshots) : null;
+    if (info) info.peak = snapshots.reduce((best, snapshot) => Math.max(best, peakOf(snapshot) ?? 0), 0) || null;
+    return { connected, reconnecting, info };
   }
 
   const snapshot = snapshots[0];
-  return { connected: Boolean(snapshot && snapshot.connected), reconnecting, info: snapshot ? snapshot.info : null };
+  const info = snapshot && snapshot.info ? { ...snapshot.info, peak: peakOf(snapshot) } : null;
+  return { connected: Boolean(snapshot && snapshot.connected), reconnecting, info };
 }
 
 function slashInvoker(interaction) {
@@ -369,6 +466,7 @@ client.on('interactionCreate', async (interaction) => {
     prefix: config.discord.prefix,
     prefixEnabled: config.discord.prefixCommandsEnabled,
     dms: { enabled: dms.enabled },
+    board,
     stats,
   };
 
@@ -599,6 +697,10 @@ async function main() {
 
   await presence.start();
   await registerCommands();
+
+  // Post or refresh the boards once at startup, then let the ticker keep them current.
+  await board.tick().catch((error) => logger.warn('[board] ' + (error && error.message ? error.message : error)));
+  board.start();
 }
 
 client.once('ready', onReady);
@@ -610,6 +712,7 @@ client.on('warn', (message) => logger.debug('[discord] ' + message));
 async function shutdown(signal) {
   logger.info('[bot] ' + signal + ' received, shutting down');
   presence.stop();
+  board.stop();
   await health.stop().catch(() => {});
   await servers.stopAll().catch(() => {});
   await client.destroy().catch(() => {});
@@ -625,4 +728,4 @@ start().catch((error) => {
   process.exit(1);
 });
 
-export { client, store, servers, logs, presence, relay, start, main };
+export { client, store, servers, logs, presence, relay, board, start, main };

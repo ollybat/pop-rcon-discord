@@ -31,7 +31,7 @@ function button(customId, label, emoji, style) {
 }
 
 /** The switch, refresh, players and details buttons under a /pop answer. */
-export function popRows({ snapshots = [], focus = null, showPlayers = true, details = true }) {
+export function popRows({ snapshots = [], focus = null, showPlayers = true, details = true, allowLive = true }) {
   const rows = [];
   const switches = [];
   const configured = snapshots.filter((snapshot) => snapshot);
@@ -62,6 +62,7 @@ export function popRows({ snapshots = [], focus = null, showPlayers = true, deta
       button(popId('refresh', focus, showPlayers, details), 'Refresh', '🔄', ButtonStyle.Success),
       button(popId('toggle', focus, !showPlayers, details), showPlayers ? 'Hide players' : 'Show players', '👥', ButtonStyle.Secondary),
       button(popId('details', focus, showPlayers, !details), details ? 'Less' : 'More', details ? '🔼' : '🔽', ButtonStyle.Secondary),
+      ...(allowLive ? [button(popId('live', focus, showPlayers, details), 'Keep live', '🔴', ButtonStyle.Secondary)] : []),
     ),
   );
 
@@ -69,7 +70,17 @@ export function popRows({ snapshots = [], focus = null, showPlayers = true, deta
 }
 
 /** Everything a /pop message needs, for any selection. */
-export function popPayload({ snapshots = [], config = null, showPlayers = true, details = true, focus = null, pollSeconds = null, guildId = null }) {
+export function popPayload({
+  snapshots = [],
+  config = null,
+  showPlayers = true,
+  details = true,
+  focus = null,
+  pollSeconds = null,
+  guildId = null,
+  note = null,
+  allowLive = true,
+}) {
   if (snapshots.length === 0) return { embeds: [popSetupHintEmbed()], components: [] };
 
   const visible = focus ? snapshots.filter((snapshot) => snapshot.slot === focus) : snapshots;
@@ -103,6 +114,7 @@ export function popPayload({ snapshots = [], config = null, showPlayers = true, 
       popSummaryEmbed({
         totalPlayers: online.reduce((sum, snapshot) => sum + snapshot.info.players, 0),
         totalMax: online.reduce((sum, snapshot) => sum + snapshot.info.max, 0),
+        note,
         onlineServers: online.length,
         totalServers: shown.length,
         pollSeconds,
@@ -131,13 +143,14 @@ export function popPayload({ snapshots = [], config = null, showPlayers = true, 
         showPlayers,
         compact: !details,
         guildId,
+        note: embeds.length === 0 ? note : null,
         peak: peakLine(config, snapshot.slot, snapshot.info ? snapshot.info.max : null),
       }),
     );
   }
 
   // The buttons always cover every server, so a focused view can still switch back to All.
-  return { embeds: embeds.slice(0, 10), components: popRows({ snapshots, focus, showPlayers, details }) };
+  return { embeds: embeds.slice(0, 10), components: popRows({ snapshots, focus, showPlayers, details, allowLive }) };
 }
 
 /** Refresh, switch server, show/hide players and compact/expand on an existing answer. */
@@ -152,6 +165,45 @@ export async function handlePopComponent(interaction, ctx) {
   }
 
   const config = ctx.store.get(guild.id);
+
+  if (parsed.action === 'live') {
+    if (!ctx.board) {
+      await interaction.reply({ content: 'Live updates are not available on this bot right now.', flags: MessageFlags.Ephemeral });
+      return true;
+    }
+
+    const message = interaction.message;
+    const running = ctx.board.liveEntry({ channelId: interaction.channelId, messageId: message.id });
+    const snapshots = ctx.servers.snapshots(guild.id);
+
+    // Press once to keep this answer live, press again to leave it where it is.
+    if (running) {
+      ctx.board.stopLive({ channelId: interaction.channelId, messageId: message.id });
+      await interaction.update({
+        ...popPayload({ snapshots, config, showPlayers: parsed.players, details: parsed.details, focus: parsed.slot, guildId: guild.id, pollSeconds: ctx.pollSeconds ?? null }),
+        content: '⏸ Live updates stopped. Press 🔴 Keep live to start them again.',
+      });
+      return true;
+    }
+
+    await interaction.deferUpdate();
+    const until = await ctx.board.startLive({
+      guildId: guild.id,
+      channelId: interaction.channelId,
+      messageId: message.id,
+      focus: parsed.slot,
+      showPlayers: parsed.players,
+      details: parsed.details,
+    });
+
+    if (!until) {
+      await interaction.followUp({ content: 'I could not start live updates on that message — I need permission to edit it.', flags: MessageFlags.Ephemeral }).catch(() => null);
+      return true;
+    }
+
+    await interaction.editReply({ content: null }).catch(() => null);
+    return true;
+  }
 
   if (parsed.action === 'refresh') {
     await interaction.deferUpdate();
