@@ -5,7 +5,7 @@ export const BRAND = {
   serverDefault: 'Spinback 5X EU',
   clan: 'Spinback clan',
   footer: 'Powered by Spinback',
-  version: '0.14.0',
+  version: '0.15.0',
 };
 
 /** Light blue is the brand colour; the rest stay semantic so status is still readable. */
@@ -23,8 +23,20 @@ export const COLORS = {
 
 export const STATUS = {
   online: { emoji: '🟢', label: 'Online', color: COLORS.online },
-  resting: { emoji: '🟡', label: 'Resting', color: COLORS.resting },
-  offline: { emoji: '🔴', label: 'Offline', color: COLORS.offline },
+  resting: { emoji: '⏳', label: 'Resting', color: COLORS.resting },
+  offline: { emoji: '🛑', label: 'Offline', color: COLORS.offline },
+  problem: { emoji: '⚠️', label: 'Problem', color: COLORS.warning },
+};
+
+/**
+ * The bot's own bio: one line per state, and these four are the whole vocabulary. Nothing else
+ * ever replaces the line, so a glance at the member list is never ambiguous.
+ */
+export const PRESENCE_LINES = {
+  online: '🟢 RCON ┆👥 {players}/{max}┆⏳Q: {queued}',
+  offline: '🛑 RCON ┆ OFFLINE',
+  resting: '⏳ RCON ┆ RESTING',
+  problem: '⚠️ RCON ┆ PROBLEM',
 };
 
 export const EMOJI = {

@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { PRESENCE_LINES } from './theme.js';
 
 function required(name) {
   const value = process.env[name]?.trim();
@@ -37,11 +38,9 @@ function list(name) {
     .filter(Boolean);
 }
 
-const DEFAULT_PRESENCE = {
-  online: '🟢 RCON┆👥  {players}/{max} ⏳{queued}/{joining}',
-  offline: '🔴 RCON┆OFFLINE',
-  resting: '🟡 RCON┆RESTING',
-};
+// The bot's status line, exactly as it reads in the member list. Four states, no rotation: a
+// glance at the bot is never ambiguous about what the server is doing.
+const DEFAULT_PRESENCE = PRESENCE_LINES;
 
 /** The .env RCON block is an optional shortcut for slot 1 until /setup saves a server. */
 function envServer() {
@@ -88,9 +87,11 @@ export const config = {
       online: optionalString('PRESENCE_ONLINE_FORMAT', DEFAULT_PRESENCE.online),
       offline: optionalString('PRESENCE_OFFLINE_FORMAT', DEFAULT_PRESENCE.offline),
       resting: optionalString('PRESENCE_RESTING_FORMAT', DEFAULT_PRESENCE.resting),
+      problem: optionalString('PRESENCE_PROBLEM_FORMAT', DEFAULT_PRESENCE.problem),
     },
-    // Rotate the activity line while the server is online, so it stays worth a glance.
-    rotate: optionalBoolean('PRESENCE_ROTATE', true),
+    // The ⚠️ PROBLEM state is switched per Discord server in /setup -> 🟢 Status line. This is
+    // the fallback for a server that has never opened that view.
+    problem: optionalBoolean('PRESENCE_PROBLEM', true),
   },
   // Say out loud when the process is stopped and when it comes back: a silent exit is exactly
   // what nobody notices until the status line on Discord has been stale for an hour.

@@ -1,19 +1,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ActivityType } from 'discord.js';
-import { PresenceManager, STATE, aggregateInfos, formatPresence, normalizeServerInfo, presenceFor } from '../src/presence.js';
+import { PresenceManager, STATE, aggregateInfos, formatPresence, normalizeServerInfo, presenceFor, struggling } from '../src/presence.js';
+import { PRESENCE_LINES } from '../src/theme.js';
 
 const silentLogger = { info() {}, warn() {} };
 
+// The shipped lines, straight from the theme: if somebody edits the bio, these tests say so.
 const options = {
   enabled: true,
   intervalSeconds: 5,
   restingOnReconnect: false,
-  formats: {
-    online: '🟢 RCON┆👥  {players}/{max} ⏳{queued}/{joining}',
-    offline: '🔴 RCON┆OFFLINE',
-    resting: '🟡 RCON┆RESTING',
-  },
+  formats: PRESENCE_LINES,
 };
 
 test('formatPresence replaces known placeholders and keeps unknown ones', () => {
@@ -47,24 +45,61 @@ test('normalizeServerInfo fills in the fields the server omits', () => {
   assert.equal(rich.memory, 4096);
 });
 
-test('presenceFor reports each of the three states', () => {
+test('the bio is four lines and nothing else', () => {
+  assert.deepEqual(PRESENCE_LINES, {
+    online: '🟢 RCON ┆👥 {players}/{max}┆⏳Q: {queued}',
+    offline: '🛑 RCON ┆ OFFLINE',
+    resting: '⏳ RCON ┆ RESTING',
+    problem: '⚠️ RCON ┆ PROBLEM',
+  });
+});
+
+test('presenceFor reports each of the four states', () => {
   const online = presenceFor(
     { connected: true, reconnecting: false, info: { players: 0, max: 100, queued: 1000, joining: 0, restarting: false } },
     options,
   );
   assert.equal(online.state, STATE.ONLINE);
-  assert.equal(online.text, '🟢 RCON┆👥  0/100 ⏳1000/0');
+  assert.equal(online.text, '🟢 RCON ┆👥 0/100┆⏳Q: 1000');
 
   const offline = presenceFor({ connected: false, reconnecting: false, info: null }, options);
   assert.equal(offline.state, STATE.OFFLINE);
-  assert.equal(offline.text, '🔴 RCON┆OFFLINE');
+  assert.equal(offline.text, '🛑 RCON ┆ OFFLINE');
 
   const resting = presenceFor({ connected: true, reconnecting: false, info: { players: 1, max: 100, restarting: true } }, options);
   assert.equal(resting.state, STATE.RESTING);
-  assert.equal(resting.text, '🟡 RCON┆RESTING');
+  assert.equal(resting.text, '⏳ RCON ┆ RESTING');
 
-  // Connected, but the server never answered serverinfo: there are no counts to show.
-  assert.equal(presenceFor({ connected: true, reconnecting: false, info: null }, options).state, STATE.OFFLINE);
+  // Connected, but the server never answered serverinfo: that is the ⚠️ state, not silence.
+  const quiet = presenceFor({ connected: true, reconnecting: false, info: null }, options);
+  assert.equal(quiet.state, STATE.PROBLEM);
+  assert.equal(quiet.text, '⚠️ RCON ┆ PROBLEM');
+});
+
+test('struggling spots a server that answers but is not well', () => {
+  const base = { connected: true, reconnecting: false, latencyMs: 40 };
+
+  assert.equal(struggling({ ...base, info: { players: 3, max: 100, framerate: 60 } }), false);
+  assert.equal(struggling({ ...base, info: null }), true, 'RCON up, serverinfo silent');
+  assert.equal(struggling({ ...base, info: { players: 3, max: 100, framerate: 4 } }), true, 'a map at four frames a second');
+  assert.equal(struggling({ ...base, latencyMs: 4000, info: { players: 3, max: 100, framerate: 60 } }), true, 'a slow RCON round-trip');
+  assert.equal(struggling({ connected: false, reconnecting: false, info: null }), false, 'offline is its own line');
+  assert.equal(struggling({ ...base, info: { players: 3, max: 100, framerate: 0 } }), false, 'Rust reports 0 fps while loading; that is not a verdict');
+});
+
+test('the PROBLEM line only appears when the mode is on', () => {
+  const strained = { connected: true, reconnecting: false, latencyMs: 5000, info: { players: 3, max: 100, queued: 0, framerate: 60, restarting: false } };
+
+  assert.equal(presenceFor(strained, options).state, STATE.PROBLEM);
+  assert.equal(presenceFor(strained, options).text, '⚠️ RCON ┆ PROBLEM');
+
+  const off = presenceFor(strained, { ...options, problem: false });
+  assert.equal(off.state, STATE.ONLINE, 'with the mode off a slow server still reads as online');
+  assert.equal(off.text, '🟢 RCON ┆👥 3/100┆⏳Q: 0');
+
+  // With the mode off, a socket that never answers falls back to the offline line.
+  const silent = { connected: true, reconnecting: false, info: null };
+  assert.equal(presenceFor(silent, { ...options, problem: false }).state, STATE.OFFLINE);
 });
 
 test('restingOnReconnect shows the yellow state while the client backs off', () => {
@@ -101,14 +136,14 @@ test('PresenceManager pushes a Watching activity and only re-pushes on change', 
   await manager.refresh();
   assert.equal(manager.state, STATE.OFFLINE);
   assert.deepEqual(applied.at(-1), {
-    activities: [{ name: '🔴 RCON┆OFFLINE', type: ActivityType.Watching }],
+    activities: [{ name: '🛑 RCON ┆ OFFLINE', type: ActivityType.Watching }],
     status: 'dnd',
   });
 
   snapshot = { connected: true, reconnecting: false, info: { players: 4, max: 100, queued: 0, joining: 0, restarting: false } };
   await manager.refresh();
   assert.equal(manager.state, STATE.ONLINE);
-  assert.equal(applied.at(-1).activities[0].name, '🟢 RCON┆👥  4/100 ⏳0/0');
+  assert.equal(applied.at(-1).activities[0].name, '🟢 RCON ┆👥 4/100┆⏳Q: 0');
   assert.equal(applied.at(-1).status, 'online');
 
   const pushes = applied.length;
@@ -141,40 +176,42 @@ test('PresenceManager survives a provider that throws', async () => {
   assert.equal(applied.length, 1);
 });
 
-test('while the server is online the activity line rotates through its frames', async () => {
+test('the label never rotates: one server, one line', async () => {
   const applied = [];
   const manager = new PresenceManager({
     client: { user: { setPresence: (payload) => applied.push(payload) } },
     logger: silentLogger,
-    options: {
-      ...options,
-      rotateFrames: ['👥 {players}/{max}', '⏳ {queued} queued', '🥇 {peak} peak today'],
-    },
-    provider: async () => ({ connected: true, reconnecting: false, info: { players: 7, max: 100, queued: 2, peak: 31 } }),
+    options,
+    provider: async () => ({ connected: true, reconnecting: false, info: { players: 7, max: 100, queued: 2, restarting: false } }),
   });
 
-  await manager.refresh();
-  await manager.refresh();
-  await manager.refresh();
-  await manager.refresh();
+  for (let pass = 0; pass < 4; pass += 1) await manager.refresh();
 
-  const names = applied.map((payload) => payload.activities[0].name);
-  assert.equal(names[0], '👥 7/100');
-  assert.equal(names[1], '⏳ 2 queued');
-  assert.equal(names[2], '🥇 31 peak today');
-  assert.equal(names[3], '👥 7/100', 'it wraps around');
+  assert.equal(applied.length, 1, 'a line that did not change is never re-pushed');
+  assert.equal(applied[0].activities[0].name, '🟢 RCON ┆👥 7/100┆⏳Q: 2');
 });
 
-test('an offline server keeps its offline line instead of rotating', async () => {
+test('the PROBLEM switch is read on every poll, so /setup applies at once', async () => {
   const applied = [];
+  let problem = false;
+  const strained = { connected: true, reconnecting: false, latencyMs: 5000, info: { players: 2, max: 100, queued: 0, framerate: 60, restarting: false } };
   const manager = new PresenceManager({
     client: { user: { setPresence: (payload) => applied.push(payload) } },
     logger: silentLogger,
-    options: { ...options, rotateFrames: ['👥 {players}/{max}', '⏳ {queued} queued'] },
-    provider: async () => ({ connected: false, reconnecting: false, info: null }),
+    options: { ...options, problem: () => problem },
+    provider: async () => strained,
   });
 
   await manager.refresh();
+  assert.equal(manager.state, STATE.ONLINE);
+
+  problem = true;
   await manager.refresh();
-  assert.deepEqual(applied.map((payload) => payload.activities[0].name), ['🔴 RCON┆OFFLINE']);
+  assert.equal(manager.state, STATE.PROBLEM);
+  assert.equal(applied.at(-1).activities[0].name, '⚠️ RCON ┆ PROBLEM');
+  assert.equal(applied.at(-1).status, 'idle');
+
+  problem = false;
+  await manager.refresh();
+  assert.equal(manager.state, STATE.ONLINE);
 });

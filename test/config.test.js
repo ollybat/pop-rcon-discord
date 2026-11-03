@@ -26,6 +26,8 @@ const MANAGED = [
   'PRESENCE_ONLINE_FORMAT',
   'PRESENCE_OFFLINE_FORMAT',
   'PRESENCE_RESTING_FORMAT',
+  'PRESENCE_PROBLEM_FORMAT',
+  'PRESENCE_PROBLEM',
   'LOG_LEVEL',
   'LOG_TIMESTAMPS',
 ];
@@ -64,9 +66,11 @@ test('config reads the required values and applies the Spinback defaults', async
   assert.equal(config.presence.enabled, true);
   assert.equal(config.presence.serverSlot, '1');
   assert.equal(config.presence.restingOnReconnect, false);
-  assert.equal(config.presence.formats.online, '🟢 RCON┆👥  {players}/{max} ⏳{queued}/{joining}');
-  assert.equal(config.presence.formats.offline, '🔴 RCON┆OFFLINE');
-  assert.equal(config.presence.formats.resting, '🟡 RCON┆RESTING');
+  assert.equal(config.presence.formats.online, '🟢 RCON ┆👥 {players}/{max}┆⏳Q: {queued}');
+  assert.equal(config.presence.formats.offline, '🛑 RCON ┆ OFFLINE');
+  assert.equal(config.presence.formats.resting, '⏳ RCON ┆ RESTING');
+  assert.equal(config.presence.formats.problem, '⚠️ RCON ┆ PROBLEM');
+  assert.equal(config.presence.problem, true, 'the PROBLEM state is on until /setup says otherwise');
   assert.equal(config.log.level, 'info');
   assert.equal(config.log.timestamps, true);
   assert.equal(config.log.chatChannelId, null);
@@ -87,6 +91,7 @@ test('numbers, booleans, lists and custom formats are all parsed', async () => {
       POLL_INTERVAL_SECONDS: '1',
       PRESENCE_RESTING_ON_RECONNECT: 'yes',
       PRESENCE_ONLINE_FORMAT: 'online {players}',
+      PRESENCE_PROBLEM: 'no',
       PRESENCE_SERVER_SLOT: 'all',
       BOT_OWNER_IDS: '111, 222',
       DISCORD_GUILD_ID: '333',
@@ -101,7 +106,8 @@ test('numbers, booleans, lists and custom formats are all parsed', async () => {
   assert.equal(config.poll.intervalSeconds, 5, 'the 5 second floor protects the server');
   assert.equal(config.presence.restingOnReconnect, true);
   assert.equal(config.presence.formats.online, 'online {players}');
-  assert.equal(config.presence.formats.offline, '🔴 RCON┆OFFLINE');
+  assert.equal(config.presence.problem, false, 'PRESENCE_PROBLEM=no switches the ⚠️ state off for everybody');
+  assert.equal(config.presence.formats.offline, '🛑 RCON ┆ OFFLINE', 'the other lines keep their defaults');
   assert.deepEqual(config.discord.botOwnerIds, ['111', '222']);
   assert.equal(config.discord.guildId, '333');
   assert.equal(config.discord.prefix, '?');

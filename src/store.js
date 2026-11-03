@@ -22,6 +22,9 @@ export function emptyGuildConfig(guildId) {
     alerts: { enabled: true, milestones: true, outage: true },
     // The daily digest: yesterday's numbers, once a day, in a channel of your choosing.
     digest: { enabled: false, channelId: null, hour: null, lastSent: null },
+    // What the bot's own status line may say. `problem` adds the ⚠️ state: the server is up,
+    // but it is answering slowly, running at a crawl, or not answering serverinfo at all.
+    presence: { problem: true },
 
     // slot -> { day, peak, peakAt }: the busiest moment of the current UTC day.
     stats: {},
@@ -99,6 +102,8 @@ export function normalizeGuildConfig(raw, guildId) {
     milestones: raw.alerts?.milestones !== false,
     outage: raw.alerts?.outage !== false,
   };
+
+  config.presence = { problem: raw.presence?.problem !== false };
 
   config.stats = normalizeStats(raw.stats);
   config.updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : null;

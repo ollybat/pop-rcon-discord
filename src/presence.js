@@ -1,10 +1,12 @@
 import { ActivityType } from 'discord.js';
 import { COLORS, STATUS } from './theme.js';
+import { serverVerdict } from './health.js';
 
 export const STATE = {
   ONLINE: 'online',
   OFFLINE: 'offline',
   RESTING: 'resting',
+  PROBLEM: 'problem',
 };
 
 // The colour of the bot's own status dot for each RCON state.
@@ -12,6 +14,7 @@ const DOT = {
   online: 'online',
   offline: 'dnd',
   resting: 'idle',
+  problem: 'idle',
 };
 
 export { COLORS, STATUS };
@@ -90,11 +93,23 @@ export function aggregateInfos(snapshots) {
 }
 
 /**
- * Decide which of the three states the server is in.
+ * Is the server up but clearly not well? RCON connecting is not the same as the server being
+ * happy: a Rust map at four frames a second, an RCON round-trip of seconds, or a socket that
+ * never answers serverinfo all look like an online server from the outside.
+ */
+export function struggling(snapshot) {
+  if (!snapshot?.connected) return false;
+  if (!snapshot.info) return true;
+  return serverVerdict(snapshot).id === 'strained';
+}
+
+/**
+ * Decide which of the four states the server is in.
  * snapshot: { connected, reconnecting, info }
  */
-export function presenceFor(snapshot, options) {
+export function presenceFor(snapshot, options = {}) {
   const formats = options.formats ?? {};
+  const problemOn = options.problem !== false;
 
   if (!snapshot.connected) {
     const state = options.restingOnReconnect && snapshot.reconnecting ? STATE.RESTING : STATE.OFFLINE;
@@ -102,19 +117,25 @@ export function presenceFor(snapshot, options) {
   }
 
   if (!snapshot.info) {
-    // Socket is up but the server did not answer, so there are no counts to show.
-    return { state: STATE.OFFLINE, text: formatPresence(formats.offline) };
+    // Socket is up but the server did not answer, so there are no counts to show. That is either
+    // the ⚠️ state or, with the mode off, plain silence.
+    const state = problemOn ? STATE.PROBLEM : STATE.OFFLINE;
+    return { state, text: formatPresence(formats[state]) };
   }
 
   if (snapshot.info.restarting) {
     return { state: STATE.RESTING, text: formatPresence(formats.resting) };
   }
 
+  if (problemOn && struggling(snapshot)) {
+    return { state: STATE.PROBLEM, text: formatPresence(formats.problem) };
+  }
+
   return { state: STATE.ONLINE, text: formatPresence(formats.online, snapshot.info) };
 }
 
 /**
- * Keeps the bot's "Watching ..." activity in sync with the Rust servers.
+ * Keeps the bot's "Watching ..." line - its bio - in sync with the Rust servers.
  * The provider is an async function returning { connected, reconnecting, info }.
  */
 export class PresenceManager {
@@ -123,9 +144,6 @@ export class PresenceManager {
     this.provider = provider;
     this.options = options;
     this.logger = logger;
-    // Which of the rotating activity frames is next.
-    this.tick = 0;
-
     this.state = null;
     this.text = null;
     this.info = null;
@@ -165,17 +183,10 @@ export class PresenceManager {
 
     this.info = snapshot.info ?? null;
 
-    // While the server is online the activity line rotates through the extra frames, so the bot's
-    // status is worth a second glance instead of repeating one number forever.
-    const frames = Array.isArray(this.options.rotateFrames) ? this.options.rotateFrames.filter(Boolean) : [];
-    if (frames.length > 1 && snapshot.connected && snapshot.info && !snapshot.info.restarting) {
-      const frame = frames[this.tick % frames.length];
-      this.tick += 1;
-      this.apply(presenceFor(snapshot, { ...this.options, formats: { ...this.options.formats, online: frame } }));
-      return;
-    }
-
-    this.apply(presenceFor(snapshot, this.options));
+    // The line says what the server is doing and nothing else. Which state that is follows the
+    // guild's own switch for the ⚠️ PROBLEM mode, read fresh every poll so /setup applies at once.
+    const problem = typeof this.options.problem === 'function' ? this.options.problem() : this.options.problem !== false;
+    this.apply(presenceFor(snapshot, { ...this.options, problem }));
   }
 
   apply(next) {

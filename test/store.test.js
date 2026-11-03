@@ -227,6 +227,13 @@ test('the history is capped', () => {
   assert.ok(history[0].day > history[history.length - 1].day);
 });
 
+test('the PROBLEM mode starts on and follows the switch saved by /setup', () => {
+  assert.deepEqual(emptyGuildConfig('g').presence, { problem: true });
+  assert.equal(normalizeGuildConfig({}, 'g').presence.problem, true, 'a config saved before the switch existed keeps it on');
+  assert.equal(normalizeGuildConfig({ presence: { problem: false } }, 'g').presence.problem, false);
+  assert.equal(normalizeGuildConfig({ presence: { problem: 'no' } }, 'g').presence.problem, true, 'only a real false switches it off');
+});
+
 test('the live board is only on when it has a channel', () => {
   const empty = emptyGuildConfig('g');
   assert.deepEqual(empty.board, { channelId: null, messageId: null, enabled: false });
