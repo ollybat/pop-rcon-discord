@@ -3,17 +3,17 @@ import { test } from 'node:test';
 import { commandByName, commands, defaultSlot, deniedEmbed, describeOptions, readOptions, slashCommandData } from '../src/commands.js';
 import { emptyGuildConfig } from '../src/store.js';
 
-test('the bot serves three commands: /setup, !pop and /ping', () => {
+test('the bot serves four commands: /setup, !pop, /lookup and /ping', () => {
   assert.deepEqual(
     commands.map((command) => command.name),
-    ['setup', 'pop', 'ping'],
+    ['setup', 'pop', 'lookup', 'ping'],
   );
 
   const data = slashCommandData();
   assert.deepEqual(
     data.map((definition) => definition.name),
-    ['setup', 'ping'],
-    'only /setup and /ping are registered with Discord',
+    ['setup', 'lookup', 'ping'],
+    '!pop stays prefix only, /setup, /lookup and /ping are registered with Discord',
   );
 
   for (const definition of data) {
@@ -28,7 +28,7 @@ test('the bot serves three commands: /setup, !pop and /ping', () => {
 
 test('the old command set is really gone from the slash menu', () => {
   const data = slashCommandData().map((definition) => definition.name);
-  for (const name of ['pop', 'status', 'board', 'help', 'players', 'say', 'kick', 'save', 'ban', 'console']) {
+  for (const name of ['pop', 'status', 'board', 'help', 'players', 'say', 'kick', 'save', 'ban', 'console', 'look up', 'look-up']) {
     assert.ok(!data.includes(name), name + ' must not be registered any more');
   }
 });
@@ -44,6 +44,11 @@ test('/setup is owner only and slash only; !pop is open and /ping is for the own
   assert.equal(pop.minTier, null, 'pop is for everybody');
   assert.equal(pop.prefixOnly, true, 'pop is prefix only');
   assert.match(pop.prefixUsage, /^!pop/);
+
+  const lookup = commandByName('lookup');
+  assert.equal(lookup.minTier, null, 'lookup is for everybody; only the staff part of it is gated');
+  assert.equal(lookup.private, false, 'the dossier is public, like !pop');
+  assert.match(lookup.prefixUsage, /^!lookup/);
 
   const ping = commandByName('ping');
   assert.equal(ping.minTier, 'coOwner', 'only the Owner and Co-Owner roles may ping');
@@ -151,4 +156,38 @@ test('a plain !pop answers with the compact view', async () => {
   assert.ok(rich.fields.length > 3);
   const richLabels = expanded.components.flatMap((row) => row.components.map((button) => button.data.label));
   assert.ok(richLabels.includes('Less'));
+});
+
+test('!lookup answers with the dossier, and a lone digit means a slot', async () => {
+  const snapshot = {
+    slot: 1,
+    name: 'spinback 5x',
+    connected: true,
+    latencyMs: 20,
+    at: new Date('2026-11-03T12:00:00.000Z').toISOString(),
+    error: null,
+    info: { players: 3, max: 100, queued: 0, joining: 0, uptime: 60, restarting: false, map: 'Procedural Map', framerate: 60, entityCount: 10, memory: 512 },
+    players: [{ id: 'a', name: 'alpha', seconds: 60, ping: 30 }],
+  };
+
+  const answers = [];
+  const base = {
+    guild: { id: 'g' },
+    guildConfig: emptyGuildConfig('g'),
+    member: { roles: { cache: new Map() } },
+    invoker: { defer: async () => {}, edit: async (payload) => answers.push(payload) },
+    servers: { refreshGuild: async () => [snapshot] },
+    pollSeconds: 20,
+  };
+
+  await commandByName('lookup').run({ ...base, options: { string: () => null, integer: () => null } });
+  assert.match(answers[0].embeds[0].data.title, /spinback 5x/);
+
+  // '!lookup alpha' is a player, '!lookup 2' is a server slot - never a player called '2'.
+  await commandByName('lookup').run({ ...base, options: { string: () => 'alpha', integer: () => null } });
+  assert.match(answers[1].embeds[0].data.title, /alpha/);
+
+  await commandByName('lookup').run({ ...base, options: { string: () => '2', integer: () => null } });
+  assert.ok(!/No one called/.test(answers[2].embeds[0].data.title), 'a digit is a slot, not a missing player');
+  assert.match(answers[2].embeds[0].data.title, /spinback 5x/);
 });

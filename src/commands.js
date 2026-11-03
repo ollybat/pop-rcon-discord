@@ -2,15 +2,18 @@ import { SlashCommandBuilder } from 'discord.js';
 import { COLORS, TIERS, tierById } from './theme.js';
 import { baseEmbed } from './embeds.js';
 import { popPayload, popPlaceholder } from './pop.js';
-import { canRun } from './permissions.js';
+import { canRun, tierOfMember } from './permissions.js';
 import { effectiveServers } from './servers.js';
 import { buildPingPayload } from './ping.js';
+import { lookupPayload } from './lookup.js';
 
 /**
- * The bot serves three commands.
+ * The bot serves four commands.
  *
  *   /setup  — the setup panel, for the Discord server owner and the bot owner only.
  *   !pop    — the headline command, open to everybody, in prefix form.
+ *   /lookup — everything the bot knows: the server dossier, one player, and for staff how the bot
+ *             itself is configured. Open to everybody; the staff part is the only gated part.
  *   /ping   — health check (Discord ping, RCON round-trip, the public URL), for the clan owners.
  *
  * Everything else (staff tools, logs, the record book) is served through the setup panel,
@@ -98,6 +101,48 @@ export const commands = [
           prefixEnabled: ctx.prefixEnabled !== false,
           dms: ctx.dms ?? null,
           stats: ctx.stats ?? null,
+        }),
+      );
+    },
+  },
+
+  {
+    name: 'lookup',
+    description: 'Everything the bot knows: server dossier, trend, record book and who is on',
+    prefixUsage: '!lookup [player]',
+    minTier: null,
+    private: false,
+    data: new SlashCommandBuilder()
+      .setName('lookup')
+      .setDescription('Everything the bot knows about the server - or about one player by name')
+      .addStringOption((option) =>
+        option.setName('player').setDescription('A player name to look up (leave empty for the whole server)').setRequired(false),
+      )
+      .addIntegerOption((option) =>
+        option.setName('server').setDescription('Server slot (1-3). Leave empty for every server').setMinValue(1).setMaxValue(3).setRequired(false),
+      ),
+    async run(ctx) {
+      let query = ctx.options.string('player');
+      let slot = ctx.options.integer('server');
+
+      // !lookup 2 means slot 2, because a single digit is never a player name.
+      if (query && /^[1-3]$/.test(String(query).trim()) && !slot) {
+        slot = Number(query);
+        query = null;
+      }
+
+      await ctx.invoker.defer();
+      const snapshots = await ctx.servers.refreshGuild(ctx.guild.id);
+
+      await ctx.invoker.edit(
+        lookupPayload({
+          snapshots,
+          config: ctx.guildConfig,
+          guild: ctx.guild,
+          focus: slot,
+          query,
+          staffTier: tierOfMember(ctx.member, ctx.guildConfig?.roles ?? null),
+          pollSeconds: ctx.pollSeconds,
         }),
       );
     },

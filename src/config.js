@@ -94,6 +94,14 @@ export const config = {
   },
   // Say out loud when the process is stopped and when it comes back: a silent exit is exactly
   // what nobody notices until the status line on Discord has been stale for an hour.
+  // One bot, one Discord server.
+  access: {
+    // ALLOWED_GUILD_IDS=123,456 names the servers this bot serves, exactly.
+    allowedGuildIds: list('ALLOWED_GUILD_IDS'),
+    // Without that, the bot locks itself to the server(s) that have already saved a setup.
+    // LEAVE_UNKNOWN_GUILDS=true makes it walk out of any other server it is invited to.
+    leaveUnknown: optionalBoolean('LEAVE_UNKNOWN_GUILDS', false),
+  },
   heartbeat: {
     enabled: optionalBoolean('RESTART_NOTICE', true),
     intervalSeconds: Math.max(15, optionalNumber('HEARTBEAT_INTERVAL_SECONDS', 60)),

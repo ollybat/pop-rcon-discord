@@ -5,7 +5,7 @@ export const BRAND = {
   serverDefault: 'Spinback 5X EU',
   clan: 'Spinback clan',
   footer: 'Powered by Spinback',
-  version: '0.13.2',
+  version: '0.14.0',
 };
 
 /** Light blue is the brand colour; the rest stay semantic so status is still readable. */
@@ -42,6 +42,13 @@ export const EMOJI = {
   ok: '✅',
   missing: '➖',
   denied: '⛔',
+  lock: '🔒',
+  lookup: '📇',
+  trend: '📈',
+  trophy: '🥇',
+  watching: '🔔',
+  receipt: '🧾',
+  search: '🔎',
 };
 
 /** Staff tiers, highest first. `required` blocks the setup wizard until it is filled in. */
