@@ -18,7 +18,7 @@ export function onboardingEmbeds({ guild = null, prefix = '!', prefixEnabled = t
   const pop = prefixEnabled ? '`' + prefix + 'pop`' : '`/pop`';
 
   const welcome = baseEmbed()
-    .setTitle('👋 Thanks for inviting ' + BRAND.tagline)
+    .setTitle('👋 Thanks for adding ' + BRAND.tagline)
     .setDescription(
       [
         'I watch your Rust servers over **WebRCON** and keep the live population in my own activity line, so anyone can see who is on without asking.',
@@ -38,7 +38,7 @@ export function onboardingEmbeds({ guild = null, prefix = '!', prefixEnabled = t
     );
 
   const steps = baseEmbed()
-    .setTitle('🚀 Three steps')
+    .setTitle('🚀 Three steps, five minutes')
     .setDescription(
       [
         '**1 · Servers** — `/setup` → **Servers** → Slot 1 → fill in the address, the RCON port and the password → press **Test**. Green means I am talking to your server.',
