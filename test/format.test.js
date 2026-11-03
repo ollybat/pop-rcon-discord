@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { bar, chunk, clock, codeBlock, duration, maskPassword, plural, quoteArgument, scrubSecrets, truncate } from '../src/format.js';
+import { bar, chunk, clock, codeBlock, duration, maskPassword, percent, plural, quoteArgument, relative, scrubSecrets, shortTime, sparkline, trendArrow, truncate } from '../src/format.js';
 
 test('duration reads like a human wrote it', () => {
   assert.equal(duration(0), '0s');
@@ -71,4 +71,31 @@ test('scrubSecrets hides the password inside an RCON url and any secret it is gi
   assert.equal(scrubSecrets('a b c', ['b']), 'a b c', 'too short to be a secret');
   assert.equal(scrubSecrets(null), '');
   assert.equal(scrubSecrets(undefined, []), '');
+});
+
+test('sparkline turns readings into one line of blocks', () => {
+  assert.equal(sparkline([]), '');
+  assert.equal(sparkline([5, 5, 5]), '▄▄▄', 'a flat series has no shape');
+  assert.equal(sparkline([0, 1, 2, 3, 4, 5, 6, 7]), '▁▂▃▄▅▆▇█');
+  assert.equal(sparkline([0, 7], { min: 0, max: 7 }), '▁█');
+  assert.equal(sparkline([3, 3, 9], { min: 0, max: 10 }).length, 3);
+  assert.equal(sparkline([1, 2, 3, 4, 5, 6, 7, 8], { width: 4 }).length, 4, 'a long series is averaged down');
+  assert.equal(sparkline(['x', null]), '')
+});
+
+test('relative and shortTime build Discord timestamps', () => {
+  const at = new Date('2026-01-02T03:04:05Z');
+  assert.equal(relative(at), '<t:1767323045:R>');
+  assert.equal(shortTime(at), '<t:1767323045:t>');
+  assert.equal(relative('not a date'), '—');
+});
+
+test('trendArrow and percent read like English', () => {
+  assert.equal(trendArrow(3), '▲ +3');
+  assert.equal(trendArrow(-2), '▼ -2');
+  assert.equal(trendArrow(0), '▬ no change');
+  assert.equal(trendArrow(null), '');
+  assert.equal(percent(42, 100), '42%');
+  assert.equal(percent(1, 0), '—');
+  assert.equal(percent(null, 100), '—');
 });
