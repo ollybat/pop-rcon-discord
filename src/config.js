@@ -92,6 +92,13 @@ export const config = {
     // Rotate the activity line while the server is online, so it stays worth a glance.
     rotate: optionalBoolean('PRESENCE_ROTATE', true),
   },
+  // Say out loud when the process is stopped and when it comes back: a silent exit is exactly
+  // what nobody notices until the status line on Discord has been stale for an hour.
+  heartbeat: {
+    enabled: optionalBoolean('RESTART_NOTICE', true),
+    intervalSeconds: Math.max(15, optionalNumber('HEARTBEAT_INTERVAL_SECONDS', 60)),
+    gapSeconds: Math.max(30, optionalNumber('RESTART_NOTICE_AFTER_SECONDS', 120)),
+  },
   errors: {
     // How long the same fault stays one message before a new one is posted.
     repeatWindowMinutes: Math.max(1, optionalNumber('ERROR_REPEAT_WINDOW_MINUTES', 15)),

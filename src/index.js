@@ -1,7 +1,9 @@
 import { ChannelType, Client, GatewayIntentBits, MessageFlags, Partials } from 'discord.js';
+import { join } from 'node:path';
 import { config, presenceSlot } from './config.js';
 import { createLogger } from './logger.js';
 import { GuildStore, configuredServers, peakFor, recordPeak } from './store.js';
+import { duration } from './format.js';
 import { LogRouter } from './logs.js';
 import { ChannelRelay } from './relay.js';
 import { PresenceManager, aggregateInfos } from './presence.js';
@@ -16,6 +18,7 @@ import { handleSetupComponent, handleSetupModal } from './setup/index.js';
 import { parsePrefixCommand } from './prefix.js';
 import { createDmRelay } from './dms.js';
 import { createHealthServer } from './web.js';
+import { Heartbeat, describeGap } from './heartbeat.js';
 import { createBoardManager } from './board.js';
 import { createServerWatch, outageText } from './watch.js';
 import { createDigestRunner, digestFor } from './digest.js';
@@ -41,7 +44,19 @@ const logs = new LogRouter({
   quietMs: config.errors.quietSeconds * 1000,
 });
 
-const relay = new ChannelRelay({ client, channelId: config.log.chatChannelId, logger });
+const heartbeat = new Heartbeat({
+  path: join(config.data.dir, 'heartbeat.json'),
+  intervalMs: config.heartbeat.intervalSeconds * 1000,
+  logger,
+});
+
+const relay = new ChannelRelay({
+  client,
+  // /setup wins; RCON_CHAT_CHANNEL_ID stays as the single-channel fallback for anyone using it.
+  channelId: config.log.chatChannelId,
+  channelIdFor: (guildId) => store.get(guildId)?.logs?.chat ?? null,
+  logger,
+});
 
 const dms = createDmRelay({
   client,
@@ -64,7 +79,7 @@ const servers = new ServerManager({
   logger,
   pollIntervalSeconds: config.poll.intervalSeconds,
   envServer: config.rcon.fromEnv,
-  onChat: (guildId, event) => relay.chat(event),
+  onChat: (guildId, event) => relay.chat(event, guildId),
   onSnapshot: (guildId, snapshot) => {
     // Every snapshot is also an outage check, so a server that dies quietly is still noticed.
     watch.observe(guildId, snapshot).catch(() => null);
@@ -780,6 +795,25 @@ async function main() {
     if (client.guilds.cache.has(id)) await servers.syncGuild(id).catch((error) => logger.warn('[servers] ' + error.message));
   }
 
+  // Say that we are back, and how long we were not. A process that is killed outright never gets
+  // to post a goodbye, so the beat file it left behind is what answers "was it down?".
+  if (config.heartbeat.enabled) {
+    const gap = describeGap(await heartbeat.read());
+    const away = gap.known && gap.seconds >= config.heartbeat.gapSeconds;
+    for (const id of ids) {
+      await logs.status(id, {
+        title: away ? '🟢 Back online after ' + duration(gap.seconds) : '🟢 Bot started',
+        description:
+          (away
+            ? 'The bot started again <t:' + Math.floor(Date.now() / 1000) + ':R>, after about ' + duration(gap.seconds) + ' with nothing running.'
+            : 'Started <t:' + Math.floor(Date.now() / 1000) + ':R>.') +
+          '\n-# Live status, the board and the alerts are running again.',
+      });
+    }
+  }
+
+  await heartbeat.start();
+
   const guildId = presenceGuildId();
   if (guildId) await servers.refreshGuild(guildId).catch(() => null);
 
@@ -803,6 +837,22 @@ client.on('warn', (message) => logger.debug('[discord] ' + message));
 
 async function shutdown(signal) {
   logger.info('[bot] ' + signal + ' received, shutting down');
+
+  // Tell the status channel we are going down on purpose, then give the queue a moment to send it.
+  if (config.heartbeat.enabled) {
+    const ids = new Set([...client.guilds.cache.keys(), ...store.listGuildIds()]);
+    for (const id of ids) {
+      await logs.status(id, {
+        title: '🔴 Bot stopping',
+        description:
+          'The host stopped the bot (' + signal + ') <t:' + Math.floor(Date.now() / 1000) + ':R>.' +
+          '\n-# A \u201cBack online\u201d line follows when it starts again.',
+      });
+    }
+    await Promise.race([logs.tail, new Promise((resolve) => setTimeout(resolve, 2000))]).catch(() => {});
+  }
+
+  heartbeat.stop();
   presence.stop();
   board.stop();
   logs.forgetRepeats();
@@ -822,4 +872,4 @@ start().catch((error) => {
   process.exit(1);
 });
 
-export { client, store, servers, logs, presence, relay, board, watch, digestRunner, start, main };
+export { client, store, servers, logs, presence, relay, board, watch, digestRunner, heartbeat, start, main };
