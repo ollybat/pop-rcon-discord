@@ -4,6 +4,28 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] — the bot notices when something is wrong
+
+The same commands, the same privacy rules: still read-only, the address still only in /setup, still
+no player history. What changed is how much the bot understands from the numbers it already had.
+
+### Added
+- **Outage alerts.** If a server does not answer for 5 minutes (configurable) the bot says so once,
+  in the status log channel and by direct message to the guild owner, with the last error and the
+  three things worth checking. When it comes back it says that too. Short blips stay quiet, and a
+  server that was never seen up is never called down, so a typo in /setup does not turn into an alarm.
+- **Restart and wipe detection.** An uptime that goes backwards means the server restarted; the bot
+  announces how long it had been up, and mentions when the save suddenly holds a fraction of the
+  entities it did — offered as "this looks like a fresh map", not as a fact. The pop answer carries
+  the restart for half an hour, then it stops being news.
+- **Verdicts instead of raw numbers.** `/ping` now leads with the worst server in the fleet and
+  labels each one 🟢 healthy / 🟢 idle / 🟠 working hard / 🟡 restarting / 📴 not answering, with the
+  readings behind a bad verdict (`9 fps`, `RCON answered in 2400 ms`) and the reason not to panic
+  ("that is the map and its population, not the Discord bot").
+- **Switches** in /setup → 📌 Live board: 🔔 milestones and 🚨 outages can be turned off separately.
+
+### Configuration
+- `ALERT_DOWN_AFTER_MINUTES` (5), `ALERT_DM_OWNER` (true).
 ## [0.10.0] — the report keeps itself current
 
 Everything here is about the answers you already have, not new commands. Nothing became public that

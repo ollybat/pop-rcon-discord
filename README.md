@@ -169,6 +169,43 @@ Timestamps are Discord timestamps, so they read in your own timezone. `/ping` ad
 counters (polls, commands, DMs passed on, errors) and warns you when the public URL answers with a
 different version than the one running — the usual sign that a redeploy has not happened yet.
 
+## When something is wrong
+
+A clan server that dies quietly at 3 am is the expensive kind of problem, so the bot watches for it.
+
+**Outage alerts.** If a server has not answered `serverinfo` for `ALERT_DOWN_AFTER_MINUTES` (5 by
+default), the bot posts one branded message to your **status** log channel and sends the guild owner
+a direct message: how long it has been down, the last error, and the three things worth checking —
+a restart in progress, the RCON port not reachable from outside (it must be **TCP** and must not be
+the game port), or a start line that lost `+rcon.web 1` or changed the port/password. When the server
+answers again, one more message says how long the outage lasted.
+
+The rules are deliberately dull, because a false alarm is worse than a late one: the server must have
+been seen up at least once (a typo in /setup never becomes an alarm), the outage must pass the
+threshold, and each outage is reported exactly once in each direction. Short blips are silent. Set
+`ALERT_DM_OWNER=false` to keep it to the log channel, or switch 🚨 off per server in
+`/setup` → 📌 **Live board**.
+
+**Restarts and wipes.** Rust reports uptime in seconds, so an uptime that goes *backwards* means the
+server restarted underneath the bot — even if it restarted while the bot was disconnected. The bot
+announces how long it had been up, and adds a hint when the entity count collapsed at the same
+moment: *"this looks like a fresh map"*. That is a heuristic, and it is worded as one. `/pop` shows
+a 🔄 Restarted field for the next half hour, then it is history.
+
+**Verdicts instead of raw numbers.** `/ping` opens with the worst server in the fleet
+(`🟢 every server answers`, `📴 1 of 2 not answering`) and labels every server:
+
+| Verdict | Means |
+| --- | --- |
+| 🟢 healthy / idle / full | It answered, and nothing about the reading is worrying |
+| 🟠 working hard | Framerate under 20 or an RCON reply slower than 1.5 s — with the reading shown |
+| 🟡 restarting | Rust is between restarts; the map is loading |
+| 🤔 serverinfo silent | The RCON session is up but the command did not answer in time |
+| 📴 not answering | No RCON session at all, with the last error |
+
+A strained verdict also says why not to worry: *"that is the map and its population, not the Discord
+bot"*. The thresholds are constants in `src/health.js`, and every verdict carries the number it came
+from, so nobody has to trust a colour.
 ## Direct messages
 
 Somebody who DMs the bot is answered with a short note saying who the bot is, that the clan
@@ -231,6 +268,8 @@ advanced shortcut that pre-fills server slot 1 before the first `/setup`.
 | `BOARD_FORCE_SECONDS` | `300` | Refresh anyway after this long, so "last reading" never goes stale. |
 | `BOARD_LIVE_MINUTES` | `20` | How long 🔴 Keep live keeps a message updating. |
 | `PRESENCE_ROTATE` | `true` | Rotate the activity line through population, queue and peak while online. |
+| `ALERT_DOWN_AFTER_MINUTES` | `5` | How long a server must be unreachable before anyone is told. |
+| `ALERT_DM_OWNER` | `true` | Also DM the guild owner about an outage and its recovery. |
 | `DATA_DIR` | `./data` | Where `/setup` settings are stored (one JSON file per server, mode 0600). |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` or `silent`. |
 | `LOG_TIMESTAMPS` | `true` | Prefix log lines with a UTC timestamp. |
@@ -283,6 +322,8 @@ src/
   commands.js     every command, in slash and !prefix form, plus the access gate
   pop.js          the interactive !pop: embeds plus the switch/refresh/toggle/live buttons
   board.js        the live board and the live /pop answers: one ticker, one edit per change
+  watch.js        outages that last, and the recovery afterwards
+  health.js       the numbers Rust reports turned into a verdict with a reason
 mcp/server.js     the MCP server: the same Rust servers, for AI clients instead of Discord
   embeds.js       every embed, in the light blue theme
   logs.js         routes events into the log channels
