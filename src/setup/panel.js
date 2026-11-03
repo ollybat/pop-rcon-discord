@@ -399,12 +399,6 @@ function snapshotFor(snapshots = []) {
   return list.find((snapshot) => snapshot?.connected && snapshot.info) ?? list[0] ?? { connected: false, reconnecting: false, info: null };
 }
 
-/** The snapshot the line is actually drawn from: the first online one, or the first at all. */
-function snapshotFor(snapshots = []) {
-  const list = snapshots ?? [];
-  return list.find((snapshot) => snapshot?.connected && snapshot.info) ?? list[0] ?? { connected: false, reconnecting: false, info: null };
-}
-
 export function guideView(config) {
   const row = new ActionRowBuilder().addComponents(
     button(SETUP_ID + ':view:servers', 'Servers', '🖥️', ButtonStyle.Primary),
