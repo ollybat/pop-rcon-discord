@@ -88,3 +88,72 @@ export function scrubSecrets(text, secrets = []) {
 
   return out;
 }
+
+const SPARK_BLOCKS = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+
+/** Average neighbouring values down to `width` buckets, so a long series still fits one line. */
+function resample(values, width) {
+  const out = [];
+  const step = values.length / width;
+  for (let index = 0; index < width; index += 1) {
+    const from = Math.floor(index * step);
+    const to = Math.max(Math.floor((index + 1) * step), from + 1);
+    const slice = values.slice(from, to);
+    out.push(Math.round(slice.reduce((sum, value) => sum + value, 0) / slice.length));
+  }
+  return out;
+}
+
+/**
+ * A one-line bar chart for a list of readings: ▁▂▄▆█
+ * A flat series renders as ▄ (there is no shape to show), and an empty series renders as ''.
+ */
+export function sparkline(values, { width = null, min = null, max = null } = {}) {
+  const numbers = (Array.isArray(values) ? values : []).map(Number).filter((value) => Number.isFinite(value));
+  if (numbers.length === 0) return '';
+
+  const points = Number.isFinite(width) && width > 1 && numbers.length > width ? resample(numbers, Math.floor(width)) : numbers;
+  const low = Number.isFinite(min) ? Number(min) : Math.min(...points);
+  const high = Number.isFinite(max) ? Number(max) : Math.max(...points);
+  const span = high - low;
+
+  return points
+    .map((value) => {
+      if (!(span > 0)) return SPARK_BLOCKS[3];
+      const level = Math.round(((value - low) / span) * (SPARK_BLOCKS.length - 1));
+      return SPARK_BLOCKS[Math.max(0, Math.min(SPARK_BLOCKS.length - 1, level))];
+    })
+    .join('');
+}
+
+/** Discord renders <t:...:R> in the reader's own timezone: "3 minutes ago". */
+export function relative(value = new Date()) {
+  const ms = value instanceof Date ? value.getTime() : Date.parse(value);
+  if (!Number.isFinite(ms)) return '—';
+  return '<t:' + Math.floor(ms / 1000) + ':R>';
+}
+
+/** <t:...:t> is the short clock time, also in the reader's timezone. */
+export function shortTime(value = new Date()) {
+  const ms = value instanceof Date ? value.getTime() : Date.parse(value);
+  if (!Number.isFinite(ms)) return '—';
+  return '<t:' + Math.floor(ms / 1000) + ':t>';
+}
+
+/** ▲ +3 / ▼ -2 / ▬ unchanged, for "since the last reading" lines. */
+export function trendArrow(delta) {
+  const value = Number(delta);
+  if (!Number.isFinite(value)) return '';
+  if (value > 0) return '▲ +' + value;
+  if (value < 0) return '▼ ' + value;
+  return '▬ no change';
+}
+
+/** "12 of 100 (12%)", without pretending the total is known when it is not. */
+export function percent(value, total) {
+  const part = Number(value);
+  const whole = Number(total);
+  if (!Number.isFinite(part)) return '—';
+  if (!Number.isFinite(whole) || whole <= 0) return '—';
+  return Math.round((part / whole) * 100) + '%';
+}
