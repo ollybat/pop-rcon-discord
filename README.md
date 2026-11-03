@@ -227,6 +227,10 @@ advanced shortcut that pre-fills server slot 1 before the first `/setup`.
 | `WEB_PORT` | `SERVER_PORT` | Port for the health endpoint. `0` lets the OS choose; unset `WEB_ENABLED` to turn it off. |
 | `PUBLIC_URL` | – | The public address of your app, e.g. `https://nyksp9z6p1.apps.bot-hosting.cloud`. `/ping` calls it and reports the status and latency. |
 | `POLL_INTERVAL_SECONDS` | `20` | One poll drives the status line, `!pop` and the join/leave logs. Floor is 5. |
+| `BOARD_INTERVAL_SECONDS` | `30` | How often the live board and live `/pop` answers refresh. Floor is 15. |
+| `BOARD_FORCE_SECONDS` | `300` | Refresh anyway after this long, so "last reading" never goes stale. |
+| `BOARD_LIVE_MINUTES` | `20` | How long 🔴 Keep live keeps a message updating. |
+| `PRESENCE_ROTATE` | `true` | Rotate the activity line through population, queue and peak while online. |
 | `DATA_DIR` | `./data` | Where `/setup` settings are stored (one JSON file per server, mode 0600). |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` or `silent`. |
 | `LOG_TIMESTAMPS` | `true` | Prefix log lines with a UTC timestamp. |
@@ -273,11 +277,12 @@ src/
   index.js        wiring: Discord client, events, command dispatch, graceful shutdown
   rcon.js         Rust WebRCON websocket client (no Discord knowledge)
   servers.js      one monitor per server: poll, snapshot, join/leave diffing
-  presence.js     the three-state status line
+  presence.js     the three-state status line, and its rotating frames while online
   store.js        per-guild settings from /setup (atomic JSON, mode 0600)
   setup/          the wizard: panel.js builds the components, index.js handles them
   commands.js     every command, in slash and !prefix form, plus the access gate
-  pop.js          the interactive !pop: embeds plus the switch/refresh/toggle buttons
+  pop.js          the interactive !pop: embeds plus the switch/refresh/toggle/live buttons
+  board.js        the live board and the live /pop answers: one ticker, one edit per change
 mcp/server.js     the MCP server: the same Rust servers, for AI clients instead of Discord
   embeds.js       every embed, in the light blue theme
   logs.js         routes events into the log channels

@@ -4,6 +4,32 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] — the report keeps itself current
+
+Everything here is about the answers you already have, not new commands. Nothing became public that
+was private, the server address is still only in /setup, and the bot still cannot touch the game.
+
+### Added
+- **Live board** (`/setup` → 📌 **Live board**): pick a channel and one message there keeps itself up
+  to date — population, queue, uptime, the day's peak and the shape of the last readings. Edits are
+  skipped when nothing changed, and a deleted message is re-posted instead of going quiet.
+- **🔴 Keep live** on any `/pop` answer: that one message refreshes itself (20 minutes by default,
+  then it stops and says so). Press it again to stop early.
+- **Milestone announcements** (`🔔`/`🔕` in the same view): a new record for the day, the server
+  filling up and the queue starting are posted to your status log channel. Once per event, never a
+  stream of them.
+- **A rotating activity line**: while the server is online the bot's status cycles through
+  population, queue/uptime and the day's peak instead of repeating one number. `PRESENCE_ROTATE=false`
+  turns it off.
+
+### Changed
+- The board and the live answers carry a small `-# ` line saying what refreshes them and when they stop.
+- `/pop` answers gained a fourth button in the action row; the board's own message has no live button,
+  since it is already live.
+
+### Configuration
+- `BOARD_INTERVAL_SECONDS` (30), `BOARD_FORCE_SECONDS` (300), `BOARD_LIVE_MINUTES` (20),
+  `PRESENCE_ROTATE` (true).
 ## [0.9.0] - the bot introduces itself when it is invited
 
 ### Added

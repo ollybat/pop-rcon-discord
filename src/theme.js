@@ -5,7 +5,7 @@ export const BRAND = {
   serverDefault: 'Spinback 5X EU',
   clan: 'Spinback clan',
   footer: 'Powered by Spinback',
-  version: '0.9.0',
+  version: '0.10.0',
 };
 
 /** Light blue is the brand colour; the rest stay semantic so status is still readable. */
