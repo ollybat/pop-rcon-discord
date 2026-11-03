@@ -140,3 +140,41 @@ test('PresenceManager survives a provider that throws', async () => {
   assert.equal(manager.state, STATE.OFFLINE);
   assert.equal(applied.length, 1);
 });
+
+test('while the server is online the activity line rotates through its frames', () => {
+  const applied = [];
+  const manager = new PresenceManager({
+    client: { user: { setActivity: (activity) => applied.push(activity) } },
+    logger: silentLogger,
+    options: {
+      ...options,
+      rotateFrames: ['👥 {players}/{max}', '⏳ {queued} queued', '🥇 {peak} peak today'],
+    },
+    provider: async () => ({ connected: true, reconnecting: false, info: { players: 7, max: 100, queued: 2, peak: 31 } }),
+  });
+
+  manager.refresh();
+  manager.refresh();
+  manager.refresh();
+  manager.refresh();
+
+  const names = applied.map((activity) => activity.name);
+  assert.equal(names[0], '👥 7/100');
+  assert.equal(names[1], '⏳ 2 queued');
+  assert.equal(names[2], '🥇 31 peak today');
+  assert.equal(names[3], '👥 7/100', 'it wraps around');
+});
+
+test('an offline server keeps its offline line instead of rotating', () => {
+  const applied = [];
+  const manager = new PresenceManager({
+    client: { user: { setActivity: (activity) => applied.push(activity) } },
+    logger: silentLogger,
+    options: { ...options, rotateFrames: ['👥 {players}/{max}', '⏳ {queued} queued'] },
+    provider: async () => ({ connected: false, reconnecting: false, info: null }),
+  });
+
+  manager.refresh();
+  manager.refresh();
+  assert.deepEqual(applied.filter(Boolean).map((activity) => activity.name), ['🔴 RCON┆OFFLINE']);
+});

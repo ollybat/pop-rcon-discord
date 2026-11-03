@@ -105,3 +105,23 @@ test('a server with history shows its direction and shape', async () => {
   assert.match(trend.value, /averaging 7\.2/);
   assert.match(trend.value, /last 5 readings/);
 });
+
+test('the action row offers a live switch, unless the message is already a board', () => {
+  const rows = popRows({ snapshots: [snapshot(1, 3)], focus: 1 });
+  const ids = rows.at(-1).components.map((component) => component.data.custom_id);
+  assert.ok(ids.includes('sb:pop:live:1:1:1'), 'members can keep an answer live');
+  assert.deepEqual(parsePopId('sb:pop:live:all:0:1'), { action: 'live', slot: null, players: false, details: true });
+
+  const board = popRows({ snapshots: [snapshot(1, 3)], focus: 1, allowLive: false });
+  const boardIds = board.at(-1).components.map((component) => component.data.custom_id);
+  assert.equal(boardIds.some((id) => id.includes(':live:')), false, 'a board message has no live button');
+});
+
+test('a note lands on the first embed, where it is read', () => {
+  const one = popPayload({ snapshots: [snapshot(1, 3)], config: emptyGuildConfig('g'), note: '-# live now' });
+  assert.match(one.embeds[0].data.description, /-# live now/);
+
+  const many = popPayload({ snapshots: [snapshot(1, 3), snapshot(2, 4)], config: emptyGuildConfig('g'), note: '-# live now' });
+  assert.match(many.embeds[0].data.description, /-# live now/, 'the summary carries it');
+  assert.equal(/live now/.test(many.embeds[1].data.description ?? ''), false, 'the server embeds do not repeat it');
+});

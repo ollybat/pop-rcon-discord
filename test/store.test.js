@@ -226,3 +226,29 @@ test('the history is capped', () => {
   assert.equal(history[0].day, history[0].day, 'newest first');
   assert.ok(history[0].day > history[history.length - 1].day);
 });
+
+test('the live board is only on when it has a channel', () => {
+  const empty = emptyGuildConfig('g');
+  assert.deepEqual(empty.board, { channelId: null, messageId: null, enabled: false });
+  assert.deepEqual(empty.alerts, { enabled: true }, 'milestones start on');
+
+  const off = normalizeGuildConfig({ board: { channelId: '123456789012345678', enabled: true } }, 'g');
+  assert.equal(off.board.channelId, '123456789012345678');
+  assert.equal(off.board.enabled, true);
+  assert.equal(off.board.messageId, null);
+
+  const noChannel = normalizeGuildConfig({ board: { enabled: true, messageId: '999' } }, 'g');
+  assert.equal(noChannel.board.enabled, false, 'a board with nowhere to post is off');
+  assert.equal(noChannel.board.messageId, '999');
+
+  const junk = normalizeGuildConfig({ board: { channelId: 'not-a-channel', enabled: true } }, 'g');
+  assert.equal(junk.board.channelId, null);
+  assert.equal(junk.board.enabled, false);
+});
+
+test('milestones can be turned off and survive a reload', () => {
+  const config = normalizeGuildConfig({ alerts: { enabled: false } }, 'g');
+  assert.equal(config.alerts.enabled, false);
+  assert.equal(normalizeGuildConfig({}, 'g').alerts.enabled, true);
+  assert.equal(normalizeGuildConfig({ alerts: 'nonsense' }, 'g').alerts.enabled, true);
+});
