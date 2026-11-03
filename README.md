@@ -19,6 +19,8 @@ server owner a **/setup** wizard plus one headline command for everybody: **!pop
   the long version (map, FPS, entities, memory, one line per player) and **Less** folds it back.
 - **A record book** - the busiest moment of every day is remembered per server, per UTC day, for
   90 days, and shown in `!pop` as today's peak.
+- **It says when it stops** - `🔴 Bot stopping` and `🟢 Back online after 8m` in the status channel, so a
+  host restart cannot leave you guessing whether the bot is running.
 - **A public health endpoint** - the bot also listens on the port your host gives it, so your
   app URL answers instead of showing *"app unreachable"*: `GET /health` returns the live state as
   JSON and `GET /ping` returns `pong`. Handy for uptime monitors and free hosts that like traffic.
@@ -27,8 +29,8 @@ server owner a **/setup** wizard plus one headline command for everybody: **!pop
   answered. Restricted to the 👑 Owner and 🛡️ Co-Owner roles.
 - **An MCP server** - `mcp/server.js` lets Claude Desktop / Claude Code / Codex read the same
   Rust servers directly, no Discord in the middle. See [docs/MCP.md](docs/MCP.md).
-- **Logs** - join & leave (with session length), every command, errors, and server
-  connects/disconnects. A fault that keeps happening stays **one** message with a running count on it,
+- **Logs** - join & leave (with session length), every command, errors, server connects/disconnects,
+  and Rust in-game chat (read-only, one-way into Discord). A fault that keeps happening stays **one** message with a running count on it,
   and says `✅ Quiet again` when it stops, so one outage cannot bury the channel.
 - **Light blue everywhere** - every embed uses the Spinback palette and footer, and the bot wears
   the name Spinback in your server.

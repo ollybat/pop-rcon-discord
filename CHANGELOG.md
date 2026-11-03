@@ -4,6 +4,23 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.2] — the bot says when it stops
+
+### Added
+- **Start and stop notices.** The status channel now gets `🔴 Bot stopping` when the host stops the
+  bot on purpose and `🟢 Back online after 8m` when it comes back, so a silent exit is visible instead
+  of becoming a status line nobody has looked at for an hour. A tiny heartbeat file
+  (`data/heartbeat.json`) is rewritten every minute: a process that is killed outright never gets to
+  post a goodbye, and that file is what answers how long it was away. `RESTART_NOTICE=false` switches
+  it off; `HEARTBEAT_INTERVAL_SECONDS` (60) and `RESTART_NOTICE_AFTER_SECONDS` (120) tune it.
+- **💬 In-game Chat moved into `/setup`**, as a fifth choice in **📜 Log channels**, next to join/leave,
+  commands, errors and status. Rust chat is mirrored one-way into the channel you pick, per server - the
+  bot still never sends anything to the server. `RCON_CHAT_CHANNEL_ID` keeps working as the
+  single-channel fallback for anyone using it.
+
+### Changed
+- The **📜 Log channels** view now puts two channel pickers on each row. Five pickers plus the button
+  row would have been six rows, and Discord allows five.
 ## [0.13.1] — one error, not nineteen
 
 ### Fixed
