@@ -68,7 +68,7 @@ test('the setup panel summarises roles, logs, servers and readiness', () => {
   assert.match(roles.value, /not set/);
 
   const logs = fieldNamed(embed, 'Log channels');
-  assert.match(logs.name, /\(1\/4\)/);
+  assert.match(logs.name, /\(1\/5\)/);
   assert.match(logs.value, /<#200>/);
 
   const servers = fieldNamed(embed, 'Servers');

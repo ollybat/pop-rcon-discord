@@ -57,7 +57,7 @@ test('a channel from /setup wins over the env channel, per guild', async () => {
 
   assert.equal(await relay.chat({ message: 'hello', raw: { Username: 'Olly' } }, 'g1'), true);
   assert.equal(sent[0].id, CHANNEL);
-  assert.match(sent[0].content, /\*\*Olly:\*\* hello/);
+  assert.match(sent[0].content, /\[Rust global\] Olly:\*\* hello/);
 });
 
 test('with nothing configured the relay does nothing at all', async () => {
