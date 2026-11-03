@@ -4,6 +4,23 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] — the day's story, once a day
+
+Still read-only, still no player history, still no address outside /setup. What is new is that the
+one number per day the bot already stored is finally read back to you.
+
+### Added
+- **Daily digest** (opt-in: /setup → 📌 Live board): a short post in a channel of your choosing,
+  once a day, with yesterday's busiest moment, how it compares with the day before, the week's
+  average against the week before, and the best day recorded so far. Choose the channel with the
+  picker, press 📊 to switch it on, 🕗 to move the hour, 👀 to preview it privately first.
+- **Honest gaps.** A day the bot did not watch is reported as *no reading*, never as a zero, and a
+  week with too few recorded days says so instead of printing a misleading average.
+- A missed digest is caught up when the bot starts again (a restart at 23:00 still posts that day's),
+  and a failure to post is warned about once, not once a minute.
+
+### Configuration
+- `DIGEST_HOUR` (20, UTC), `DIGEST_WINDOW_DAYS` (7).
 ## [0.11.0] — the bot notices when something is wrong
 
 The same commands, the same privacy rules: still read-only, the address still only in /setup, still

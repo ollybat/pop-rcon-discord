@@ -169,6 +169,28 @@ Timestamps are Discord timestamps, so they read in your own timezone. `/ping` ad
 counters (polls, commands, DMs passed on, errors) and warns you when the public URL answers with a
 different version than the one running — the usual sign that a redeploy has not happened yet.
 
+## The daily digest
+
+One short post a day, in a channel you pick, that reads the numbers the bot already keeps: the
+busiest moment it saw yesterday, whether that is up or down on the day before, the average of the
+last `DIGEST_WINDOW_DAYS` days against the window before that, and the best day recorded so far.
+
+It is **off until you switch it on** (`/setup` → 📌 **Live board**):
+
+- **pick the channel** with the 📊 selector;
+- **📊 Digest on/off** starts and pauses it;
+- **🕗 Send at 20:00 UTC** moves the hour, one press at a time (or set `DIGEST_HOUR`);
+- **👀 Preview it** shows exactly what would be posted, privately, before anyone sees it.
+
+Everything in it comes from the bot's own readings — one line per server per day, the busiest
+moment it saw — and nothing is inferred from them. That has two consequences worth knowing:
+
+- a day the bot was not watching is reported as **no reading**, never as a zero;
+- a week without enough recorded days says so instead of printing a misleading average.
+
+If the bot is offline when the hour comes round, the digest goes out at the next start instead of
+being skipped. A post that fails (the channel was deleted, permissions changed) is logged once and
+retried on the next pass — the day is only marked as sent after it actually went out.
 ## When something is wrong
 
 A clan server that dies quietly at 3 am is the expensive kind of problem, so the bot watches for it.
@@ -270,6 +292,8 @@ advanced shortcut that pre-fills server slot 1 before the first `/setup`.
 | `PRESENCE_ROTATE` | `true` | Rotate the activity line through population, queue and peak while online. |
 | `ALERT_DOWN_AFTER_MINUTES` | `5` | How long a server must be unreachable before anyone is told. |
 | `ALERT_DM_OWNER` | `true` | Also DM the guild owner about an outage and its recovery. |
+| `DIGEST_HOUR` | `20` | The UTC hour the daily digest goes out, unless a guild picked its own. |
+| `DIGEST_WINDOW_DAYS` | `7` | How many days the week-over-week comparison covers. |
 | `DATA_DIR` | `./data` | Where `/setup` settings are stored (one JSON file per server, mode 0600). |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` or `silent`. |
 | `LOG_TIMESTAMPS` | `true` | Prefix log lines with a UTC timestamp. |
@@ -324,6 +348,7 @@ src/
   board.js        the live board and the live /pop answers: one ticker, one edit per change
   watch.js        outages that last, and the recovery afterwards
   health.js       the numbers Rust reports turned into a verdict with a reason
+  digest.js       the daily digest: yesterday, the week, the best day, and the gaps
 mcp/server.js     the MCP server: the same Rust servers, for AI clients instead of Discord
   embeds.js       every embed, in the light blue theme
   logs.js         routes events into the log channels
