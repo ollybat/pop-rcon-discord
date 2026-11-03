@@ -4,6 +4,34 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] — one bot, one server, and /lookup
+
+### Added
+- **`/lookup` (`!lookup`) - everything the bot knows, in one answer.** The default answer is the
+  server dossier: the live reading in the title (`📇 spinback 5x - 12/100 online`), the population bar
+  with its trend arrow, one **Right now** line (queue, uptime, latency, slot), **The server** (map,
+  FPS, entities, memory), the **📈 Trend** sparkline with the window's average and busiest moment,
+  the **🥇 Record book** (today's peak and when, the best day, the busiest days, how many days are
+  behind it), and the whole roster on one line with session lengths and ✨ newcomers.
+  `lookup player:<name>` finds one player - which server, how long they have been on, their
+  connection with a 🟢/🟡/🔴 dot, their place on the server - and answers an unknown name by
+  listing who *is* on instead of coming back empty. `lookup server:2` opens on one server.
+  A second card, **🧾 What this bot knows**, states the limits out loud: live readings, one busy
+  moment per day, three days of samples, no playtime, no last-seen, and no in-game actions at all.
+  Staff (👑 Owner, 🛡️ Co-Owner) get a third card, **🎛️ How this bot is set up here**: the servers
+  watched, the staff roles, every channel the bot uses and the alert switches.
+- **One bot, one Discord server.** The bot now refuses to serve a second guild. `ALLOWED_GUILD_IDS`
+  names the server(s) it belongs to; with it empty the bot locks itself to the server whose `/setup`
+  has been saved, and a fresh `/setup` claims the bot with no restart. Another server that runs a
+  command gets one private `🔒 This bot belongs to one server` card and nothing else - no stored
+  configuration, no relay, no player data - and an invite is answered in the system channel instead
+  of the setup guide. `LEAVE_UNKNOWN_GUILDS=true` also leaves, rather than just refusing. Two saved
+  setups raise one `[access]` warning in the host log naming the environment variable to set.
+  `GET /health` now reports `access: { mode, servers }` so you can see which state the lock is in.
+
+### Changed
+- The slash menu is now `/setup`, `/lookup` and `/ping`. `!pop` stays prefix only.
+
 ## [0.13.2] — the bot says when it stops
 
 ### Added
