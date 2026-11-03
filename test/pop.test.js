@@ -87,7 +87,7 @@ test('the More/Less button switches the compact view', () => {
   const payload = popPayload({ snapshots: [snapshot(1, 12)], config: emptyGuildConfig('g'), details: false, guildId: 'g' });
   const names = payload.embeds[0].data.fields.map((field) => field.name);
   assert.ok(names.some((name) => name.includes('Population')));
-  assert.ok(!names.some((name) => name.includes('Trend')), 'the compact view drops the chart');
+  assert.ok(!names.some((name) => name.includes('Map')), 'the compact view folds the server facts into its header line');
 });
 
 test('a server with history shows its direction and shape', async () => {
@@ -161,4 +161,79 @@ test('a normal answer is untouched by the live bookkeeping', async () => {
   };
 
   assert.equal(await handlePopComponent(interaction, ctx), true);
+});
+
+
+/** A server that reports everything, so the compact layout has something to leave out. */
+function richSnapshot(slot, players = 12, roster = []) {
+  return {
+    slot,
+    name: 'Server ' + slot,
+    host: '127.0.0.1',
+    port: 28016,
+    connected: true,
+    info: {
+      players,
+      max: 100,
+      queued: 3,
+      joining: 1,
+      uptime: 8000,
+      restarting: false,
+      hostname: 'S' + slot,
+      map: 'Procedural Map',
+      framerate: 61,
+      entityCount: 21543,
+      memory: 3800,
+    },
+    players: roster,
+    latencyMs: 38,
+    at: new Date().toISOString(),
+    error: null,
+  };
+}
+
+test('the compact answer is much shorter and still carries the numbers', () => {
+  const config = emptyGuildConfig('g');
+  const roster = [
+    { id: 'a', name: 'alpha', seconds: 7200, ping: 40 },
+    { id: 'b', name: 'bravo', seconds: 600, ping: 210 },
+  ];
+  const compact = popPayload({ snapshots: [richSnapshot(1, 12, roster)], config, details: false, guildId: 'g' }).embeds[0].data;
+  const full = popPayload({ snapshots: [richSnapshot(1, 12, roster)], config, details: true, guildId: 'g' }).embeds[0].data;
+
+  assert.ok(compact.fields.length < full.fields.length, 'the compact answer has fewer fields');
+  assert.ok(compact.fields.length <= 3, 'it stays at three fields at most');
+
+  // Smaller, not emptier: the reading, the shape and the roster all survive.
+  assert.match(compact.title, /12\/100/);
+  const population = compact.fields.find((field) => field.name.includes('Population'));
+  assert.match(population.value, /[\u2588\u2591]/, 'the bar is still drawn');
+  assert.match(compact.description, /up 2h 13m/);
+  assert.match(compact.description, /38 ms/);
+  assert.match(compact.description, /Procedural Map/);
+  assert.match(compact.description, /61 fps/);
+  assert.match(compact.description, /21.5k entities/);
+  assert.match(compact.description, /3.7 GB/, 'memory reads in GB once it is big');
+  const players = compact.fields.find((field) => field.name.includes('On right now'));
+  assert.ok(!players.value.includes('\n'), 'the roster is one line, not one line per player');
+  assert.match(players.value, /alpha/);
+  assert.match(players.value, /\u{1F534}/u, 'a bad connection still keeps its warning');
+  assert.ok(!/\u{1F7E2}/u.test(players.value), 'the ordinary green dots are the noise that goes');
+});
+
+test('the compact answer leaves out what is not there', () => {
+  const config = emptyGuildConfig('g');
+  const quiet = richSnapshot(1, 0, []);
+  quiet.info.queued = 0;
+  const data = popPayload({ snapshots: [quiet], config, details: false, guildId: 'g' }).embeds[0].data;
+
+  assert.match(data.description, /nobody on/);
+  assert.ok(!/queued/.test(data.description), 'an empty queue is not worth a word');
+  assert.ok(!data.fields.some((field) => field.name.includes('On right now')), 'and an empty roster is not worth a field');
+});
+
+test('a server with no readings yet still gets a tidy compact answer', () => {
+  const data = popPayload({ snapshots: [richSnapshot(1, 4, [])], config: emptyGuildConfig('g'), details: false, guildId: 'g' }).embeds[0].data;
+  assert.ok(!data.fields.some((field) => field.name.includes('Trend')), 'no history, no chart');
+  assert.match(data.fields[0].value, /[\u2588\u2591]/);
 });

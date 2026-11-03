@@ -106,3 +106,49 @@ test('deniedEmbed explains which roles are allowed', () => {
   assert.match(embed.data.description, /\/setup/);
   assert.equal(embed.data.footer.text, 'Powered by Spinback');
 });
+
+
+test('a plain !pop answers with the compact view', async () => {
+  const snapshot = {
+    slot: 1,
+    name: 'spinback 5x',
+    host: '127.0.0.1',
+    port: 28016,
+    connected: true,
+    info: { players: 12, max: 100, queued: 0, joining: 0, uptime: 600, restarting: false, map: 'Procedural Map', framerate: 61, entityCount: 820, memory: 900 },
+    players: [{ id: 'a', name: 'alpha', seconds: 600, ping: 30 }],
+    latencyMs: 20,
+    at: new Date().toISOString(),
+    error: null,
+  };
+
+  let sent = null;
+  const ctx = {
+    guild: { id: 'g' },
+    guildConfig: emptyGuildConfig('g'),
+    options: { integer: () => null, boolean: () => null },
+    invoker: { defer: async () => {}, edit: async (payload) => { sent = payload; } },
+    servers: { refreshGuild: async () => [snapshot] },
+  };
+
+  await commandByName('pop').run(ctx);
+
+  const data = sent.embeds[0].data;
+  assert.ok(!data.fields.some((field) => field.name.includes('Map')), 'no map field: it is in the header line');
+  assert.match(data.description, /Procedural Map/);
+  assert.ok(data.fields.length <= 3);
+
+  // The long version is still one button away.
+  const labels = sent.components.flatMap((row) => row.components.map((button) => button.data.label));
+  assert.ok(labels.includes('More'), 'the compact answer offers More');
+
+  // Asking for it explicitly still gives the long one.
+  let expanded = null;
+  const asked = { ...ctx, options: { integer: () => null, boolean: (name) => (name === 'details' ? true : null) }, invoker: { defer: async () => {}, edit: async (payload) => { expanded = payload; } } };
+  await commandByName('pop').run(asked);
+  const rich = expanded.embeds[0].data;
+  assert.ok(rich.fields.some((field) => field.name.includes('Map')));
+  assert.ok(rich.fields.length > 3);
+  const richLabels = expanded.components.flatMap((row) => row.components.map((button) => button.data.label));
+  assert.ok(richLabels.includes('Less'));
+});

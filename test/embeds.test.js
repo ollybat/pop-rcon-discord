@@ -14,6 +14,7 @@ import {
   panelEmbed,
   peakLine,
   pingEmbed,
+  playerLine,
   playerLines,
   popServerEmbed,
   popSetupHintEmbed,
@@ -549,4 +550,27 @@ test('the digest embed admits a missing day and a thin history', () => {
   assert.match(fieldNamed(embed, '2. two').value, /the same as the day before/);
   assert.match(fieldNamed(embed, '2. two').value, /Averaging \*\*12\*\*/);
   assert.match(fieldNamed(embed, 'Every server together').value, /12 players across/);
+});
+
+
+test('playerLine condenses a roster into one readable line', () => {
+  assert.equal(playerLine([]), null, 'nobody on means no line at all');
+
+  const roster = [
+    { id: 'a', name: 'alpha', seconds: 120, ping: 30 },
+    { id: 'b', name: 'bravo', seconds: 7200, ping: 210 },
+    { id: 'c', name: 'charlie', seconds: 600, ping: 95 },
+  ];
+  const line = playerLine(roster, { newcomers: new Set(['a']) });
+
+  assert.ok(!line.includes('\n'), 'one line, however many players');
+  assert.ok(line.indexOf('bravo') < line.indexOf('charlie'), 'longest session first');
+  assert.match(line, /\u2728\*\*alpha\*\*/, 'a newcomer keeps the sparkle');
+  assert.match(line, /\u{1F534}/u, 'a struggling connection is flagged');
+  assert.ok(!line.includes('\u{1F7E2}'), 'the everyday green dots are the noise that goes');
+  assert.match(line, /\(2h\)/, 'and everyone keeps their session length');
+
+  const long = playerLine(Array.from({ length: 40 }, (_, i) => ({ id: 'p' + i, name: 'player' + i, seconds: 60 })), { limit: 5 });
+  assert.match(long, /and 35 more/);
+  assert.ok(long.split('\u00b7').length <= 6, 'the list stops at the limit');
 });
