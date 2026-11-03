@@ -46,7 +46,12 @@ export function mainPanel(config, { snapshots = [], guild = null } = {}) {
     button(SETUP_ID + ':reset', 'Reset', '🧹', ButtonStyle.Danger),
   );
 
-  return { embeds: [panelEmbed({ guild, config })], components: [top, bottom] };
+  const tests = new ActionRowBuilder().addComponents(
+    button(SETUP_ID + ':testlogs', 'Test channels', '🧪', ButtonStyle.Secondary),
+    button(SETUP_ID + ':testping', 'Health check', '🏓', ButtonStyle.Secondary),
+  );
+
+  return { embeds: [panelEmbed({ guild, config, snapshots })], components: [top, bottom, tests] };
 }
 
 export function rolesView(config) {
@@ -108,6 +113,7 @@ export function logsView(config) {
 
   rows.push(
     new ActionRowBuilder().addComponents(
+      button(SETUP_ID + ':testlogs', 'Send test', '🧪', ButtonStyle.Secondary),
       button(SETUP_ID + ':createlogs', 'Make channels', '📁', ButtonStyle.Success),
       button(SETUP_ID + ':logclear', 'Clear all', '🧹', ButtonStyle.Danger),
       button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary),

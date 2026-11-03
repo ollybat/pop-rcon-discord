@@ -2,7 +2,7 @@ import { ChannelType, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { BRAND, CATEGORY_PRESET, COLORS, LOG_CHANNEL_PRESETS, LOG_KINDS, LOG_KIND_IDS, logKindById, tierById } from '../theme.js';
 import { MAX_SERVERS, describeConfig, emptyGuildConfig, normalizeServerInput } from '../store.js';
 import { canRunSetup, matchRolesByName } from '../permissions.js';
-import { hintEmbed } from '../embeds.js';
+import { hintEmbed, statusLogEmbed } from '../embeds.js';
 import { guideView, logsView, mainPanel, parseCustomId, resetView, rolePickView, rolesView, serverModal, serversView, slotView } from './panel.js';
 
 function denied(interaction, gate) {
@@ -69,6 +69,38 @@ async function gate(interaction, ctx) {
 }
 
 /** Buttons, selects and modals all land here. */
+/**
+ * Prove the log channels really work: one small branded embed per configured channel, and a
+ * report of what could and could not be written. Nothing secret is ever part of the test.
+ */
+async function testLogChannels(guild, config) {
+  const sent = [];
+  const failed = [];
+
+  for (const kind of LOG_KINDS) {
+    const channelId = config?.logs?.[kind.id] ?? null;
+    if (!channelId) continue;
+
+    const channel = guild.channels.cache.get(channelId) ?? (await guild.channels.fetch(channelId).catch(() => null));
+    if (!channel) {
+      failed.push(kind.emoji + ' ' + kind.label + ' (gone)');
+      continue;
+    }
+
+    const embed = statusLogEmbed({
+      title: '🧪 Test message — ' + kind.emoji + ' ' + kind.label,
+      description: 'This channel is wired up correctly. Everything the bot posts here looks like this.',
+      color: COLORS.success,
+    });
+
+    const ok = await channel.send({ embeds: [embed] }).then(() => true).catch(() => false);
+    if (ok) sent.push(kind.emoji + ' <#' + channelId + '>');
+    else failed.push(kind.emoji + ' <#' + channelId + '>');
+  }
+
+  return { sent, failed };
+}
+
 export async function handleSetupComponent(interaction, ctx) {
   const parsed = parseCustomId(interaction.customId);
   if (!parsed) return false;
@@ -97,6 +129,27 @@ export async function handleSetupComponent(interaction, ctx) {
     case 'guide':
       await interaction.update(guideView(config));
       return true;
+
+    case 'testlogs': {
+      await interaction.deferUpdate();
+      const result = await testLogChannels(guild, config);
+      const lines = [];
+      if (result.sent.length > 0) lines.push('✅ Delivered to: ' + result.sent.join(', '));
+      if (result.failed.length > 0) lines.push('⚠️ Could not write to: ' + result.failed.join(', ') + ' — check that I may send messages there.');
+      if (result.sent.length === 0 && result.failed.length === 0) lines.push('No log channel is set yet. Pick one above, or press **Make channels**.');
+      await interaction.followUp({
+        embeds: [hintEmbed('🧪 Test messages', lines.join('\n'), result.failed.length > 0 ? COLORS.warning : COLORS.success)],
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    case 'testping': {
+      await interaction.deferUpdate();
+      const fresh = await ctx.servers.refreshGuild(guild.id).catch(() => []);
+      await interaction.update(mainPanel(config, { snapshots: fresh, guild }));
+      return true;
+    }
 
     case 'refresh': {
       await ctx.servers.syncGuild(guild.id);
