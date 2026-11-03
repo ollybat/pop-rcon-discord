@@ -9,6 +9,9 @@ import { ServerManager } from './servers.js';
 import { commandByName, defaultSlot, describeOptions, dispatch, readOptions, slashCommandData } from './commands.js';
 import { errorEmbed, hintEmbed, welcomeEmbed } from './embeds.js';
 import { handlePopComponent } from './pop.js';
+import { handlePingComponent } from './ping.js';
+import { history, slotKey } from './history.js';
+import { stats } from './stats.js';
 import { handleSetupComponent, handleSetupModal } from './setup/index.js';
 import { parsePrefixCommand } from './prefix.js';
 import { createDmRelay } from './dms.js';
@@ -42,6 +45,7 @@ const dms = createDmRelay({
     forwardStrangers: config.dm.forwardStrangers,
     autoReplyCooldownMs: config.dm.replyCooldownSeconds * 1000,
     prefix: config.discord.prefix,
+    stats,
   },
 });
 
@@ -69,6 +73,8 @@ function healthStatus() {
   const roster = [];
   for (const guildId of store.listGuildIds()) {
     for (const snapshot of servers.snapshots(guildId)) {
+      const key = slotKey(guildId, snapshot.slot);
+      const values = history.series(key).map((sample) => sample.players);
       roster.push({
         slot: snapshot.slot,
         name: snapshot.name,
@@ -77,6 +83,9 @@ function healthStatus() {
         max: snapshot.info?.max ?? null,
         queued: snapshot.info?.queued ?? null,
         latencyMs: snapshot.latencyMs ?? null,
+        trend: history.delta(key),
+        average: history.average(key),
+        shape: values.length >= 2 ? values.slice(-12).join(',') : null,
       });
     }
   }
@@ -87,6 +96,11 @@ function healthStatus() {
     gatewayPingMs: Number.isFinite(client.ws?.ping) ? client.ws.ping : null,
     guilds: client.guilds.cache.size,
     servers: roster,
+    stats: (() => {
+      const snapshot = stats.snapshot();
+      delete snapshot.recentErrors;
+      return snapshot;
+    })(),
   };
 }
 
@@ -138,6 +152,7 @@ async function recordSnapshot(guildId, snapshot) {
 
     const probe = JSON.parse(JSON.stringify(store.get(guildId)));
     if (!recordPeak(probe, snapshot.slot, snapshot.info.players)) return;
+    stats.inc('peaks');
 
     await store.update(guildId, (next) => {
       recordPeak(next, snapshot.slot, snapshot.info.players);
@@ -292,12 +307,16 @@ async function runCommand(command, options) {
     slot: defaultSlot(guildConfig, config.rcon.fromEnv),
     prefix: config.discord.prefix,
     prefixEnabled: config.discord.prefixCommandsEnabled,
+    stats,
+    dms: { enabled: dms.enabled, forwardIds: config.dm.forwardIds.length },
     options: readOptions({ command, interaction: options.interaction ?? null, args: options.args ?? [] }),
     source: invoker.source,
   };
 
   const result = await dispatch(command, ctx);
   const tier = result.tier === 'botOwner' ? null : result.tier;
+  stats.inc('commands');
+  if (!result.ok && result.error && result.error !== 'permission denied') stats.note('/' + command.name + ': ' + result.error);
 
   await logs.command(guild.id, {
     user: ctx.user,
@@ -336,11 +355,29 @@ client.on('interactionCreate', async (interaction) => {
     return;
   }
 
-  const ctx = { store, servers, logs, logger, botOwnerIds: config.discord.botOwnerIds, brand: BRAND.name };
+  const ctx = {
+    store,
+    servers,
+    logs,
+    logger,
+    client,
+    botOwnerIds: config.discord.botOwnerIds,
+    brand: BRAND.name,
+    web: config.web,
+    pollSeconds: config.poll.intervalSeconds,
+    prefix: config.discord.prefix,
+    prefixEnabled: config.discord.prefixCommandsEnabled,
+    dms: { enabled: dms.enabled },
+    stats,
+  };
 
   try {
     if ((interaction.customId ?? '').startsWith('sb:pop:')) {
       if (await handlePopComponent(interaction, ctx)) return;
+    }
+
+    if ((interaction.customId ?? '').startsWith('sb:ping:')) {
+      if (await handlePingComponent(interaction, ctx)) return;
     }
 
     if ((interaction.customId ?? '').startsWith('sb:setup:')) {

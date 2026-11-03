@@ -1,10 +1,10 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { COLORS, TIERS, tierById } from './theme.js';
-import { baseEmbed, pingEmbed } from './embeds.js';
+import { baseEmbed } from './embeds.js';
 import { popPayload, popPlaceholder } from './pop.js';
 import { canRun } from './permissions.js';
 import { effectiveServers } from './servers.js';
-import { probeHealth } from './web.js';
+import { buildPingPayload } from './ping.js';
 
 /**
  * The bot serves three commands.
@@ -47,7 +47,10 @@ export const commands = [
       .addIntegerOption((option) =>
         option.setName('server').setDescription('Server slot (1-3). Leave empty for every server').setMinValue(1).setMaxValue(3).setRequired(false),
       )
-      .addBooleanOption((option) => option.setName('players').setDescription('List the player names (default true)').setRequired(false)),
+      .addBooleanOption((option) => option.setName('players').setDescription('List the player names (default true)').setRequired(false))
+      .addBooleanOption((option) =>
+        option.setName('details').setDescription('Show the map, FPS, entities and the recent trend (default true)').setRequired(false),
+      ),
     async run(ctx) {
       const slot = ctx.options.integer('server');
       const showPlayers = ctx.options.boolean('players') ?? true;
@@ -60,7 +63,17 @@ export const commands = [
         return;
       }
 
-      await ctx.invoker.edit(popPayload({ snapshots, config: ctx.guildConfig, showPlayers, focus: slot, pollSeconds: ctx.pollSeconds }));
+      await ctx.invoker.edit(
+        popPayload({
+          snapshots,
+          config: ctx.guildConfig,
+          showPlayers,
+          details: ctx.options.boolean('details') ?? true,
+          focus: slot,
+          guildId: ctx.guild.id,
+          pollSeconds: ctx.pollSeconds,
+        }),
+      );
     },
   },
   {
@@ -73,24 +86,20 @@ export const commands = [
     async run(ctx) {
       await ctx.invoker.defer();
 
-      const snapshots = await ctx.servers.refreshGuild(ctx.guild.id).catch(() => []);
-      const web = ctx.web ?? {};
-      const health = web.publicUrl ? await probeHealth({ url: web.publicUrl, timeoutMs: web.timeoutMs }) : null;
-      const localUrl = !health && web.enabled && web.port ? 'http://127.0.0.1:' + web.port + '/health' : null;
-
-      await ctx.invoker.edit({
-        embeds: [
-          pingEmbed({
-            gatewayMs: ctx.client?.ws?.ping ?? null,
-            uptimeSeconds: Math.round(process.uptime()),
-            snapshots,
-            health,
-            localUrl,
-            pollSeconds: ctx.pollSeconds ?? null,
-            memoryMb: Math.round(process.memoryUsage().rss / 1048576),
-          }),
-        ],
-      });
+      await ctx.invoker.edit(
+        await buildPingPayload({
+          guild: ctx.guild,
+          guildConfig: ctx.guildConfig,
+          servers: ctx.servers,
+          web: ctx.web ?? {},
+          client: ctx.client ?? null,
+          pollSeconds: ctx.pollSeconds ?? null,
+          prefix: ctx.prefix ?? '!',
+          prefixEnabled: ctx.prefixEnabled !== false,
+          dms: ctx.dms ?? null,
+          stats: ctx.stats ?? null,
+        }),
+      );
     },
   },
 
