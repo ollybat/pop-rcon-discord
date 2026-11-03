@@ -41,12 +41,13 @@ function makeStore(guildId, { board = {}, alerts = { enabled: true } } = {}) {
 }
 
 /** A client with one channel whose messages can be fetched, edited, deleted or missing. */
-function makeClient({ channelId = CHANNEL, missing = false, sendFails = false, editFails = false } = {}) {
+function makeClient({ channelId = CHANNEL, missing = false, sendFails = false, editFails = false, editGone = false } = {}) {
   const sent = [];
   const edits = [];
   const message = {
     id: MESSAGE,
     edit: async (payload) => {
+      if (editGone) throw Object.assign(new Error('Unknown Message'), { code: 10008 });
       if (editFails) throw new Error('no permission');
       edits.push(payload);
       return message;
@@ -160,6 +161,18 @@ test('a deleted board message is re-posted instead of going quiet', async () => 
 
   const result = await manager.syncGuild('g');
   assert.equal(result.reason, 'posted');
+  assert.equal(sent.length, 1);
+});
+
+test('a message deleted between the fetch and the edit is re-posted, without an error', async () => {
+  // This is what produced the DiscordAPIError[10008] in the console: somebody deleted the board
+  // message in the second before the bot edited it. That is a repost, not a fault.
+  const store = makeStore('g', { board: { channelId: CHANNEL, enabled: true, messageId: GONE } });
+  const { client, sent } = makeClient({ editGone: true });
+  const manager = createBoardManager({ client, store, servers: makeServers([snapshot(1, 9)]), logger: silentLogger });
+
+  const result = await manager.syncGuild('g');
+  assert.equal(result.reason, 'posted', 'the board comes back instead of erroring');
   assert.equal(sent.length, 1);
 });
 

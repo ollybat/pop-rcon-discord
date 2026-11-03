@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { detectRestart, capEvents, diffPlayers, effectiveServers, playerId, serverSignature, toPlayerList } from '../src/servers.js';
+import { detectRestart, capEvents, diffPlayers, effectiveServers, playerId, serverSignature, ServerMonitor, toPlayerList } from '../src/servers.js';
 
 test('toPlayerList normalises the JSON playerlist reply', () => {
   assert.deepEqual(toPlayerList(null), []);
@@ -141,4 +141,38 @@ test('an uptime that goes backwards is a restart, and a tiny save is a hint of a
 
   const unknown = detectRestart({ uptime: 900 }, { uptime: 4 }, at);
   assert.equal(unknown.wiped, false, 'no entity counts, no claim either way');
+});
+
+
+test('a failing server says so once, then counts, then says it recovered', () => {
+  const warns = [];
+  const infos = [];
+  const logger = { debug() {}, info: (...args) => infos.push(args.join(' ')), warn: (...args) => warns.push(args.join(' ')), error() {} };
+  const seen = [];
+
+  const monitor = new ServerMonitor({
+    guildId: 'g',
+    server: { slot: 2, name: 'Server 2', host: '127.0.0.1', port: 28016, password: 'p' },
+    logger,
+    onError: (error) => seen.push(error.message),
+  });
+
+  // One outage, nineteen polls: the console gets one line and the counter does the rest.
+  for (let i = 0; i < 19; i += 1) monitor.report(new Error('RCON command timed out after 10000ms: serverinfo'), 'poll');
+
+  assert.equal(warns.length, 1, 'nineteen failures, one console line');
+  assert.match(warns[0], /\[server 2\] poll failed: RCON command timed out/);
+  assert.equal(seen.length, 19, 'every failure still reaches the error log, which counts them');
+
+  monitor.clearFailures();
+  assert.equal(infos.length, 1, 'and the recovery is reported');
+  assert.match(infos[0], /\[server 2\] poll recovered after 19 failure\(s\)/);
+
+  // A later outage is a new episode, so it is announced again.
+  monitor.report(new Error('RCON command timed out after 10000ms: serverinfo'), 'poll');
+  assert.equal(warns.length, 2);
+
+  // A different source is tracked on its own.
+  monitor.report(new Error('connect ECONNREFUSED'), 'connect');
+  assert.equal(warns.length, 3);
 });

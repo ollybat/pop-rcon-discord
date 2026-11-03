@@ -33,7 +33,13 @@ if (config.discord.prefixCommandsEnabled || config.dm.enabled) {
 const client = new Client({ intents, partials: [Partials.Channel] });
 
 const store = new GuildStore({ dir: config.data.dir, logger });
-const logs = new LogRouter({ client, store, logger });
+const logs = new LogRouter({
+  client,
+  store,
+  logger,
+  repeatWindowMs: config.errors.repeatWindowMinutes * 60000,
+  quietMs: config.errors.quietSeconds * 1000,
+});
 
 const relay = new ChannelRelay({ client, channelId: config.log.chatChannelId, logger });
 
@@ -799,6 +805,7 @@ async function shutdown(signal) {
   logger.info('[bot] ' + signal + ' received, shutting down');
   presence.stop();
   board.stop();
+  logs.forgetRepeats();
   digestRunner.stop();
   await health.stop().catch(() => {});
   await servers.stopAll().catch(() => {});

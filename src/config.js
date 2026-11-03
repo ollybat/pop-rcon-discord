@@ -92,6 +92,12 @@ export const config = {
     // Rotate the activity line while the server is online, so it stays worth a glance.
     rotate: optionalBoolean('PRESENCE_ROTATE', true),
   },
+  errors: {
+    // How long the same fault stays one message before a new one is posted.
+    repeatWindowMinutes: Math.max(1, optionalNumber('ERROR_REPEAT_WINDOW_MINUTES', 15)),
+    // How long the quiet has to last before the message says "quiet again".
+    quietSeconds: Math.max(5, optionalNumber('ERROR_QUIET_SECONDS', 60)),
+  },
   board: {
     // How often a live population board updates itself, in seconds.
     intervalSeconds: Math.max(15, optionalNumber('BOARD_INTERVAL_SECONDS', 30)),
