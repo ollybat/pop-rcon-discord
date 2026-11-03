@@ -4,6 +4,25 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] — a smaller !pop
+
+### Changed
+- **!pop is now the compact card by default**: the title carries the reading, one header line
+  carries queue, uptime and latency plus a `-#` line of map, FPS, entities and memory, and the
+  answer keeps three fields at most - the population bar with its direction, the trend with today's
+  peak on one line, and the whole roster as a **single line** with session lengths.
+  The same twelve-player answer went from 38 rendered lines to 11, without losing a number.
+- **More / Less** still switches between the two layouts, so nothing is gone: the long version has
+  the map, FPS, entities and memory fields, the fuller trend wording, the restart note and one line
+  per player (with the ✨ newcomer mark and a latency dot for everyone).
+- The compact roster keeps only the dots worth seeing - 🟡 and 🔴 - and keeps the newcomer ✨.
+- A quiet server drops what is not worth saying: no `0 queued`, and `nobody on` on the header line
+  instead of an empty player field. Memory reads in GB once it passes 1 GB, entities as `21.5k`.
+- A server that reports no timestamps no longer prints `busiest 14 at —` (both layouts).
+
+### Notes
+- The 📌 Live board and everything else that stands alone still uses the long layout - it is a
+  message you read once, not one you ask for.
 ## [0.12.1] — the board view that Discord refused
 
 ### Fixed

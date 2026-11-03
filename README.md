@@ -13,9 +13,10 @@ server owner a **/setup** wizard plus one headline command for everybody: **!pop
 - **/setup wizard** - buttons and dropdowns, no JSON and no config files to hand edit: five staff
   roles, four log channels and up to three servers. Or press **⚡ Quick setup** and it guesses your
   existing roles by name and creates the four log channels for you.
-- **!pop** - who is online right now, with a population bar, queue, uptime, today's peak and the
-  player list, right in the channel. The buttons under it switch server, refresh on demand and hide
-  the list.
+- **!pop** - who is online right now, in one small card: population bar, uptime and latency on the
+  header line, the recent shape and today's peak, and the whole roster on a single line with session
+  lengths. The buttons under it switch server, refresh on demand and hide the list; **More** opens
+  the long version (map, FPS, entities, memory, one line per player) and **Less** folds it back.
 - **A record book** - the busiest moment of every day is remembered per server, per UTC day, for
   90 days, and shown in `!pop` as today's peak.
 - **A public health endpoint** - the bot also listens on the port your host gives it, so your
