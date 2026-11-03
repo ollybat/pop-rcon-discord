@@ -169,7 +169,6 @@ export function boardView(config, { snapshots = [], guild = null } = {}) {
       button(SETUP_ID + ':digesttoggle', digestConfig.enabled ? 'Digest on' : 'Digest off', '📊', digestConfig.enabled ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(!digestConfig.channelId),
       button(SETUP_ID + ':digesthour', 'Send at ' + String(digestConfig.hour ?? 20).padStart(2, '0') + ':00 UTC', '🕗', ButtonStyle.Secondary),
       button(SETUP_ID + ':digestpreview', 'Preview it', '👀', ButtonStyle.Secondary),
-      button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary),
     ),
   );
 
