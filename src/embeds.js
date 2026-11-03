@@ -1,7 +1,8 @@
 import { EmbedBuilder } from 'discord.js';
-import { bar, clock, duration, maskPassword, plural, scrubSecrets, truncate } from './format.js';
+import { bar, clock, duration, maskPassword, percent, plural, relative, scrubSecrets, shortTime, sparkline, trendArrow, truncate } from './format.js';
+import { history, slotKey } from './history.js';
 import { BRAND, BRAND_LOGO, COLORS, EMOJI, LOG_KINDS, STATUS, TIERS, footerText, tierById } from './theme.js';
-import { MAX_SERVERS, describeConfig, peakFor } from './store.js';
+import { MAX_SERVERS, bestFor, describeConfig, peakFor } from './store.js';
 
 export function baseEmbed({ color = COLORS.brand, logo = true } = {}) {
   const embed = new EmbedBuilder().setColor(color).setFooter({ text: footerText() });
@@ -36,7 +37,7 @@ export function serverLine(server, snapshot = null) {
   return head + '\n' + counts + ' • password ' + maskPassword(server.password) + latency;
 }
 
-export function panelEmbed({ guild, config }) {
+export function panelEmbed({ guild, config, snapshots = [] }) {
   const status = describeConfig(config);
   const servers = config?.servers ?? [];
 
@@ -63,11 +64,29 @@ export function panelEmbed({ guild, config }) {
     inline: false,
   });
 
+  const live = new Map((Array.isArray(snapshots) ? snapshots : []).filter(Boolean).map((snapshot) => [snapshot.slot, snapshot]));
+
   embed.addFields({
     name: EMOJI.servers + ' Servers (' + status.servers + '/' + MAX_SERVERS + ')',
     value: servers
-      .map((server, index) => '**Slot ' + (index + 1) + '** — ' + (server ? server.name + ' (' + server.host + ':' + server.port + ')' : EMOJI.missing + ' not configured'))
+      .map((server, index) => {
+        if (!server) return '**Slot ' + (index + 1) + '** — ' + EMOJI.missing + ' not configured';
+        const snapshot = live.get(index + 1);
+        const state = snapshot ? (snapshot.connected ? (snapshot.info ? ' ' + STATUS.online.emoji + ' ' + snapshot.info.players + '/' + snapshot.info.max : ' ' + STATUS.resting.emoji + ' connecting') : ' ' + STATUS.offline.emoji + ' offline') : '';
+        return '**Slot ' + (index + 1) + '** — ' + server.name + ' (' + server.host + ':' + server.port + ')' + state;
+      })
       .join('\n'),
+    inline: false,
+  });
+
+  const toDo = [];
+  if (status.servers === 0) toDo.push('add a server (**Servers**)');
+  if (!config?.roles?.owner) toDo.push('set the Owner Role (**Roles**)');
+  if (LOG_KINDS.filter((kind) => config?.logs?.[kind.id]).length === 0) toDo.push('pick at least one channel (**Logs**)');
+
+  embed.addFields({
+    name: '🎯 Next step',
+    value: toDo.length > 0 ? 'Still to do: ' + toDo.join(' · ') : 'Nothing left to fill in. Press **Test channels** to prove the logs work, then **Done**.',
     inline: false,
   });
 
@@ -133,12 +152,16 @@ export function hintEmbed(title, description, color = COLORS.brand) {
  * One embed field per chunk of the roster, so a full 200-player server still fits.
  * The first field says how many are online; the last one says how many were left out.
  */
-export function playerLines(players = [], perField = 20, maxFields = 4) {
-  const roster = Array.isArray(players) ? players : [];
+export function playerLines(players = [], perField = 20, maxFields = 4, newcomers = null) {
+  const list = Array.isArray(players) ? players : [];
 
-  if (roster.length === 0) {
+  if (list.length === 0) {
     return [{ name: '👥 Players', value: 'Nobody is online right now.', inline: false }];
   }
+
+  // Longest session first: that is who is actually playing, not who logged in a second ago.
+  const roster = [...list].sort((a, b) => (Number(b?.seconds) || 0) - (Number(a?.seconds) || 0));
+  const fresh = newcomers instanceof Set ? newcomers : null;
 
   const chunks = [];
   for (let index = 0; index < roster.length && chunks.length < maxFields; index += perField) {
@@ -153,20 +176,33 @@ export function playerLines(players = [], perField = 20, maxFields = 4) {
       .map((player) => {
         const who = player?.name || player?.id || 'unknown';
         const time = player?.seconds === null || player?.seconds === undefined ? '' : ' — ' + duration(player.seconds);
-        return '• **' + who + '**' + time;
+        const star = fresh && fresh.has(String(player?.id ?? '')) ? '✨ ' : '';
+        const pingBadge = pingBadgeFor(player?.ping);
+        return '• ' + star + '**' + who + '**' + time + (pingBadge ? ' · ' + pingBadge : '');
       })
       .join('\n');
 
     const last = index === chunks.length - 1;
     return {
-      name: index === 0 ? '👥 Players — ' + roster.length + ' online' : '👥 Players (' + (index + 1) + ')',
+      name: index === 0 ? '👥 Players — ' + list.length + ' online' : '👥 Players (' + (index + 1) + ')',
       value: last && remaining > 0 ? truncate(value, 950) + '\n*…and ' + plural(remaining, 'more player') + '*' : truncate(value, 1024),
       inline: false,
     };
   });
 }
 
-export function popServerEmbed(snapshot, { showPlayers = true, peak = null } = {}) {
+/** A latency dot: green under 80 ms, yellow under 150 ms, red above. */
+function pingBadgeFor(ping) {
+  const value = Number(ping);
+  if (!Number.isFinite(value)) return '';
+  const dot = value < 80 ? '🟢' : value < 150 ? '🟡' : '🔴';
+  return dot + ' ' + Math.round(value) + ' ms';
+}
+/**
+ * One server, in full: how full it is, which way it is moving, what it is running and who is on
+ * it. `guildId` turns on the recent-history half (trend, shape, average, newcomers).
+ */
+export function popServerEmbed(snapshot, { showPlayers = true, peak = null, guildId = null, compact = false } = {}) {
   const state = snapshot.connected ? (snapshot.info?.restarting ? 'resting' : 'online') : 'offline';
   const status = STATUS[state];
   const info = snapshot.info;
@@ -179,39 +215,67 @@ export function popServerEmbed(snapshot, { showPlayers = true, peak = null } = {
 
   if (!snapshot.connected) {
     embed.setDescription(
-      snapshot.error
+      (snapshot.error
         ? 'The bot cannot reach this server right now.\n' + truncate(scrubSecrets(snapshot.error), 200)
-        : 'The bot cannot reach this server right now.',
+        : 'The bot cannot reach this server right now.') + '\n-# It retries by itself every few seconds — /ping has the detail.',
     );
     return embed;
   }
 
   if (!info) {
-    embed.setDescription('Connected, but the server has not answered \`serverinfo\` yet.');
+    embed.setDescription('Connected, but the server has not answered \`serverinfo\` yet.\n-# The next reading is seconds away.');
     return embed;
   }
 
-  const percent = info.max > 0 ? Math.round((info.players / info.max) * 100) : 0;
+  const key = guildId ? slotKey(guildId, snapshot.slot) : null;
+  const series = key ? history.series(key) : [];
+  const values = series.map((sample) => sample.players);
+  const delta = key ? history.delta(key) : null;
+  const average = key ? history.average(key) : null;
+  const busiest = key ? history.windowPeak(key) : null;
+  const roster = key ? history.roster(key) : [];
+  const newcomers = new Set(roster.filter((entry) => entry.isNew).map((entry) => entry.id));
+
   const latency = snapshot.latencyMs === null || snapshot.latencyMs === undefined ? '—' : snapshot.latencyMs + ' ms';
+  const trend = delta === null ? '' : ' ' + trendArrow(delta);
+
+  embed.addFields({
+    name: '👥 Population',
+    value: bar(info.players, info.max, 20) + ' **' + info.players + '/' + info.max + '** (' + percent(info.players, info.max) + ')' + trend,
+    inline: false,
+  });
 
   embed.addFields(
-    { name: '👥 Population', value: bar(info.players, info.max, 20) + ' **' + info.players + '/' + info.max + '** (' + percent + '%)', inline: false },
     { name: '⏳ Queue', value: info.queued + ' queued • ' + info.joining + ' joining', inline: true },
     { name: EMOJI.uptime + ' Uptime', value: duration(info.uptime), inline: true },
-    { name: EMOJI.ping + ' RCON', value: latency + '\n-# updated ' + clock(snapshot.at), inline: true },
+    { name: EMOJI.ping + ' RCON', value: latency + '\n-# read ' + relative(snapshot.at), inline: true },
   );
 
   const details = [];
-  if (info.map) details.push({ name: EMOJI.map + ' Map', value: String(info.map), inline: true });
+  if (info.map) details.push({ name: EMOJI.map + ' Map', value: truncate(String(info.map), 90), inline: true });
   if (info.framerate !== null && info.framerate !== undefined) details.push({ name: EMOJI.framerate + ' FPS', value: String(info.framerate), inline: true });
   if (info.entityCount !== null && info.entityCount !== undefined) details.push({ name: '🧱 Entities', value: String(info.entityCount), inline: true });
-  if (details.length > 0) embed.addFields(...details);
+  if (Number.isFinite(Number(info.memory))) details.push({ name: '💾 Memory', value: Math.round(Number(info.memory)) + ' MB', inline: true });
+  if (!compact && details.length > 0) embed.addFields(...details);
 
-  if (peak) embed.addFields({ name: '📈 Peak today', value: peak, inline: false });
-  if (showPlayers) embed.addFields(...playerLines(snapshot.players));
+  if (!compact && series.length >= 3) {
+    const parts = [sparkline(values, { width: 24, min: 0 })];
+    const notes = [];
+    if (average !== null) notes.push('averaging ' + average);
+    notes.push('last ' + series.length + ' readings');
+    if (busiest) notes.push('busiest ' + busiest.players + ' at ' + shortTime(busiest.at));
+    parts.push('**' + (values[values.length - 1] ?? 0) + ' now** · ' + notes.join(' · '));
+    embed.addFields({ name: '📈 Trend', value: parts.join('\n'), inline: false });
+  }
+
+  if (peak && !compact) embed.addFields({ name: 'Peak today', value: peak, inline: false });
+  if (showPlayers) embed.addFields(...playerLines(snapshot.players, 20, 4, newcomers));
   return embed;
 }
-
+/**
+ * The multi-server answer: one headline number, one line per server (counts, bar, direction) and
+ * the busiest moment of the day when the guild config knows it.
+ */
 export function popSummaryEmbed({
   totalPlayers,
   totalMax,
@@ -219,9 +283,8 @@ export function popSummaryEmbed({
   totalServers,
   pollSeconds = null,
   servers = [],
+  busiest = null,
 } = {}) {
-  const percent = totalMax > 0 ? Math.round((totalPlayers / totalMax) * 100) : 0;
-
   const embed = baseEmbed()
     .setTitle(EMOJI.players + ' ' + BRAND.name + ' network')
     .setDescription(
@@ -234,9 +297,12 @@ export function popSummaryEmbed({
         ' of ' +
         totalServers +
         ' servers (' +
-        percent +
-        '%)\n' +
+        percent(totalPlayers, totalMax) +
+        ')\n' +
         bar(totalPlayers, totalMax, 22) +
+        (totalServers > onlineServers
+          ? '\n' + STATUS.offline.emoji + ' ' + plural(totalServers - onlineServers, 'server') + ' not answering right now'
+          : '') +
         (Number.isFinite(pollSeconds) ? '\n-# refreshed every ' + pollSeconds + 's' : ''),
     );
 
@@ -245,14 +311,31 @@ export function popSummaryEmbed({
     .slice(0, 6)
     .map((server) => {
       const state = server.connected ? (server.restarting ? 'resting' : 'online') : 'offline';
-      const detail = server.connected && server.max ? server.players + '/' + server.max : STATUS[state].label.toLowerCase();
-      return { name: STATUS[state].emoji + ' ' + truncate(server.name || 'Server ' + server.slot, 200), value: detail, inline: true };
+      const detail =
+        server.connected && server.max
+          ? server.players +
+            '/' +
+            server.max +
+            (Number.isFinite(server.delta) ? ' ' + trendArrow(server.delta) : '') +
+            (server.queued ? ' ⏳' + server.queued : '')
+          : STATUS[state].label.toLowerCase();
+
+      const spark = server.spark ? '\n' + server.spark : '';
+      return { name: STATUS[state].emoji + ' ' + truncate(server.name || 'Server ' + server.slot, 200), value: detail + spark, inline: true };
     });
 
   if (lines.length > 0) embed.addFields(...lines);
+
+  if (busiest && Number.isFinite(Number(busiest.peak))) {
+    embed.addFields({
+      name: '🥇 Busiest today',
+      value: '**' + busiest.name + '** peaked at ' + busiest.peak + (busiest.at ? ' ' + relative(busiest.at) : ''),
+      inline: false,
+    });
+  }
+
   return embed;
 }
-
 export function popSetupHintEmbed() {
   return baseEmbed({ color: COLORS.warning })
     .setTitle('⚠️ No servers configured yet')
@@ -346,46 +429,82 @@ export function errorEmbed(error) {
 /** "📈 Peak today: 63/100 at 18:42 UTC", or null when nothing is recorded yet. */
 export function peakLine(config, slot, max = null) {
   const peak = peakFor(config, slot);
-  if (!peak || !peak.peak) return null;
+  const best = bestFor(config, slot);
+  if ((!peak || !peak.peak) && !best) return null;
 
-  const at = peak.at ? ' at ' + clock(peak.at) : '';
-  const total = max ? '/' + max : '';
-  return '**' + peak.peak + total + '**' + at;
+  const parts = [];
+  if (peak && peak.peak) {
+    parts.push('**' + peak.peak + (max ? '/' + max : '') + '**' + (peak.at ? ' at ' + shortTime(peak.at) : ''));
+  }
+  if (best && Number.isFinite(Number(best.peak)) && (!peak || best.peak > (peak.peak ?? -1))) {
+    parts.push('best ' + best.peak + (best.day ? ' on ' + best.day : ''));
+  }
+
+  return parts.join(' · ');
 }
 
-/** The one-page answer to "why do I need +rcon.web 1?", with the exact start line. */
 /**
- * The /ping report: the bot's own health first, then the RCON round-trip per server, then
- * whatever the public URL answered. Everyone who may run it is a clan owner, so no secrets.
+ * The /ping dashboard. Everyone who may run it is a clan owner and it is answered privately, so it
+ * can talk about roles, channels and counters - but never about a password or an address.
  */
-export function pingEmbed({ gatewayMs = null, uptimeSeconds = null, snapshots = [], health = null, localUrl = null, version = BRAND.version, pollSeconds = null, memoryMb = null } = {}) {
+export function pingEmbed({
+  gatewayMs = null,
+  uptimeSeconds = null,
+  snapshots = [],
+  health = null,
+  localUrl = null,
+  version = BRAND.version,
+  pollSeconds = null,
+  memoryMb = null,
+  stats = null,
+  config = null,
+  dms = null,
+  prefix = '!',
+  prefixEnabled = true,
+  now = new Date(),
+} = {}) {
+  const parts = [];
+  if (Number.isFinite(gatewayMs)) parts.push('**' + gatewayMs + ' ms** to Discord');
+  parts.push('up **' + duration(uptimeSeconds) + '**');
+  parts.push(BRAND.name + ' **' + version + '** on node ' + String(process?.version ?? '').replace(/^v/, ''));
+  if (Number.isFinite(memoryMb)) parts.push(Math.round(memoryMb) + ' MB RAM');
+
   const embed = baseEmbed({ color: COLORS.brandSoft })
     .setTitle('🏓 Pong')
-    .setDescription(
-      '**Discord gateway** ' +
-        (Number.isFinite(gatewayMs) ? gatewayMs + ' ms' : '—') +
-        '\n**Bot uptime** ' +
-        duration(uptimeSeconds) +
-        '\n**Build** ' +
-        BRAND.name +
-        ' ' +
-        version +
-        ' on node ' +
-        String(process?.version ?? '').replace(/^v/, ''),
-    )
-    .setTimestamp(new Date());
+    .setDescription(parts.join(' • ') + '\n-# checked ' + relative(now));
 
   const roster = Array.isArray(snapshots) ? snapshots : [];
   const serverLines = roster.length
     ? roster.map((snapshot) => {
         const name = snapshot.name || 'Server ' + snapshot.slot;
         if (!snapshot.connected) {
-          return STATUS.offline.emoji + ' **' + name + '** — offline' + (snapshot.error ? ' (' + truncate(snapshot.error, 60) + ')' : '');
+          return (
+            STATUS.offline.emoji +
+            ' **' +
+            name +
+            '** — offline' +
+            (snapshot.error ? ' (' + truncate(scrubSecrets(snapshot.error), 60) + ')' : '') +
+            '\n-# last try ' + relative(snapshot.at)
+          );
         }
+
         const pingText = snapshot.latencyMs === null || snapshot.latencyMs === undefined ? '—' : snapshot.latencyMs + ' ms';
         const info = snapshot.info;
-        const players = info ? ' • ' + info.players + '/' + info.max + (info.queued ? ' ⏳' + info.queued : '') : ' • serverinfo did not answer';
-        return STATUS.online.emoji + ' **' + name + '** — ' + pingText + players;
+        const counts = info
+          ? ' • ' + info.players + '/' + info.max + (info.queued ? ' ⏳' + info.queued : '') + ' • up ' + duration(info.uptime)
+          : ' • serverinfo did not answer';
+        const resting = info?.restarting ? ' ' + STATUS.resting.emoji + ' restarting' : '';
+        return (
+          STATUS.online.emoji +
+          ' **' +
+          name +
+          '** — ' +
+          pingText +
+          counts +
+          resting +
+          '\n-# read ' +
+          relative(snapshot.at)
+        );
       })
     : ['No Rust servers yet — run **/setup** and add one.'];
 
@@ -393,19 +512,46 @@ export function pingEmbed({ gatewayMs = null, uptimeSeconds = null, snapshots = 
 
   const runtime = [];
   if (Number.isFinite(pollSeconds)) runtime.push('polls every ' + pollSeconds + 's');
-  if (Number.isFinite(memoryMb)) runtime.push(Math.round(memoryMb) + ' MB RAM');
-  runtime.push(String(process?.version ?? '').replace(/^v/, '') + ' / node');
+  if (stats) {
+    runtime.push(stats.polls + ' polls');
+    runtime.push(stats.commands + ' commands');
+    if (stats.dmForwarded || stats.dmAnswered) runtime.push(stats.dmForwarded + ' DMs passed on');
+    if (stats.peaks) runtime.push(stats.peaks + ' new peaks');
+    runtime.push(stats.errors ? '⚠️ ' + stats.errors + ' error(s)' : '✅ no errors');
+  }
   if (runtime.length) embed.addFields({ name: '🧩 Runtime', value: runtime.join(' • '), inline: false });
 
+  if (stats && stats.lastError) {
+    embed.addFields({ name: '🩹 Last problem', value: truncate(scrubSecrets(stats.lastError), 400) + (stats.lastErrorAt ? '\n-# ' + relative(stats.lastErrorAt) : ''), inline: false });
+  }
+
+  if (config) {
+    const status = describeConfig(config);
+    const roles = TIERS.filter((tier) => config.roles?.[tier.id]).length;
+    const channels = LOG_KINDS.filter((kind) => config.logs?.[kind.id]).length;
+    embed.addFields({
+      name: '⚙️ Configuration',
+      value: [
+        plural(status.servers, 'server') + ' configured' + (status.ready ? ' ' + EMOJI.ok + ' ready' : ' ⚠️ incomplete'),
+        roles + '/' + TIERS.length + ' staff roles • ' + channels + '/' + LOG_KINDS.length + ' log channels',
+        'prefix commands ' + (prefixEnabled ? 'on (\`' + prefix + 'pop\`)' : 'off'),
+        'direct messages ' + (dms?.enabled ? 'on' : 'off'),
+      ].join('\n'),
+      inline: false,
+    });
+  }
+
   if (health) {
+    const reported = versionFrom(health.body);
+    const stale = reported && reported !== version ? ' ⚠️ serving **' + reported + '** — redeploy to match' : '';
     const line = health.ok
-      ? '✅ **' + (health.status ?? 200) + ' OK** in ' + (health.ms ?? 0) + ' ms'
+      ? '✅ **' + (health.status ?? 200) + ' OK** in ' + (health.ms ?? 0) + ' ms' + stale
       : '⚠️ ' + truncate(health.error ?? 'no answer', 120) + (health.ms === null ? '' : ' after ' + health.ms + ' ms');
     embed.addFields({ name: '🌐 Public URL', value: line + '\n' + truncate(health.url ?? '—', 200), inline: false });
   } else if (localUrl) {
     embed.addFields({
       name: '🌐 Health endpoint',
-      value: 'Listening on `' + localUrl + '` — set **PUBLIC_URL** to the address your host proxies and I will call it back here.',
+      value: 'Listening on \`' + localUrl + '\` — set **PUBLIC_URL** to the address your host proxies and I will call it back here.',
       inline: false,
     });
   }
@@ -413,6 +559,16 @@ export function pingEmbed({ gatewayMs = null, uptimeSeconds = null, snapshots = 
   return embed;
 }
 
+/** The version a /health body reports, when it parses as JSON. */
+export function versionFrom(body) {
+  if (!body) return null;
+  try {
+    const parsed = JSON.parse(String(body));
+    return parsed && typeof parsed.version === 'string' ? parsed.version : null;
+  } catch {
+    return null;
+  }
+}
 export function guideEmbed({ config }) {
   const server = config?.servers?.[0] ?? null;
   const port = server?.port ?? 28016;
