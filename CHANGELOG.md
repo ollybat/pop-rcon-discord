@@ -33,6 +33,13 @@ All notable changes to this project are listed here. The format follows
   is the fallback for a server that never opens the view.
 
 ### Fixed
+- **📋 Logs in /setup failed to open.** The view put two channel pickers in one action row, and
+  Discord answers that with `COMPONENT_LAYOUT_WIDTH_EXCEEDED` - a select menu takes the whole row.
+  The channel is now chosen first and set on the next screen, exactly like the roles flow, with a
+  **🧹 Clear** for a channel that is already set. Two panel tests guard it from coming back: one
+  picker per row, and a row of buttons inside the width Discord accepts (five buttons stop fitting
+  past ~50 characters, which is why the 🟢 Status line button got a row of its own instead of
+  joining the four tests).
 - The shared status table - the status-log embeds, `!pop`, `/lookup` and `/setup` - moved to the
   same emoji as the bio (⏳ resting, 🛑 offline), so a channel and the member list never tell
   different stories. The `/ping` verdict table keeps its own finer set (🟠 working hard, 🤔 silent,
