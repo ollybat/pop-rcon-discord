@@ -18,6 +18,7 @@ function inbox({ fail = false } = {}) {
       },
     },
     received,
+    warnings,
     logger: { ...quiet, warn: (line) => warnings.push(line) },
   };
 }

@@ -88,8 +88,15 @@ export async function sendGuideTo({ user, guild = null, logger = console, prefix
  */
 export async function guildOwnerOf(guild) {
   if (!guild) return null;
-  if (guild.ownerId && typeof guild.fetchOwner === 'function') return guild.fetchOwner().catch(() => null);
-  if (guild.ownerId && guild.client?.users?.fetch) return guild.client.users.fetch(guild.ownerId).catch(() => null);
+
+  if (typeof guild.fetchOwner === 'function') {
+    const owner = await guild.fetchOwner().catch(() => null);
+    if (owner) return owner;
+  }
+
+  const userId = guild.ownerId ?? null;
+  const users = guild.client?.users ?? null;
+  if (userId && typeof users?.fetch === 'function') return users.fetch(userId).catch(() => null);
   return null;
 }
 
