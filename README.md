@@ -135,6 +135,22 @@ may have registered before, so nothing shows up twice.
 `PREFIX_COMMANDS_ENABLED=true` (the default) and the **Message Content Intent** enabled in the
 Discord developer portal.
 
+## When the bot is invited
+
+The server owner is **DM'd the setup guide** immediately, because an invite with no setup is a bot
+that does nothing. The guide is three private embeds and is never posted in a channel:
+
+1. what the bot does, what it gives you once a server is added, and the promise that the RCON
+   password never leaves your private settings;
+2. the three steps — **Servers** (fill in and press Test), **Roles**, **Logs** (pick or make channels,
+   then **Test channels**) — plus the exact line your Rust server must start with;
+3. the five failures that actually happen: timeout or connection refused, a password that does not
+   match, a missing **Message Content Intent** for prefix commands, a missing
+   `applications.commands` scope, and how to reach a person.
+
+If the owner does not accept DMs, the bot says so once in the server's system channel instead of
+dropping it. The guide can be re-sent at any time with **📬 DM me the guide** in `/setup`.
+
 ## What a pop answer tells you
 
 Every answer is built from the last reading and from a short history the bot keeps in memory (30
