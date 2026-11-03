@@ -40,7 +40,7 @@ function makeClient({ channelId = CHANNEL, missing = false, sendFails = false } 
       return { id: 'msg-1' };
     },
   };
-  return { client: { channels: { fetch: async () => (missing ? null : channel), cache: new Map([[channelId, channel]]) } }, sent };
+  return { client: { channels: { fetch: async () => (missing ? null : channel), cache: new Map(missing ? [] : [[channelId, channel]]) } }, sent };
 }
 
 test('day stamps are UTC, and shifting them crosses months and years', () => {
