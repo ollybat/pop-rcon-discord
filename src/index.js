@@ -203,7 +203,7 @@ async function reportOutage({ action, guildId, snapshot, seconds }) {
   if (!config.alerts.dmOwner) return;
 
   const guild = client.guilds.cache.get(guildId) ?? null;
-  const owner = guild ? await guildOwnerOf(guild, { logger }).catch(() => null) : null;
+  const owner = guild ? await guildOwnerOf(guild).catch(() => null) : null;
   if (!owner) return;
 
   const sent = await owner
