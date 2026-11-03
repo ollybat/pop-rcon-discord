@@ -17,7 +17,8 @@ export class LogRouter {
     // same timeout, everybody wants to know it happened nineteen times.
     repeatWindowMs = 15 * 60 * 1000,
     quietMs = 60 * 1000,
-    editThrottleMs = 5000,
+    // At most one update per half minute: a 20-second poll cannot turn one fault into 18 edits.
+    editThrottleMs = 30 * 1000,
     now = () => new Date(),
     setTimer = setTimeout,
     clearTimer = clearTimeout,
