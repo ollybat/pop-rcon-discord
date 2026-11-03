@@ -4,7 +4,7 @@ import { MAX_SERVERS, describeConfig, emptyGuildConfig, normalizeServerInput } f
 import { canRunSetup, matchRolesByName } from '../permissions.js';
 import { hintEmbed, statusLogEmbed } from '../embeds.js';
 import { sendGuideTo } from '../onboarding.js';
-import { guideView, logsView, mainPanel, parseCustomId, resetView, rolePickView, rolesView, serverModal, serversView, slotView } from './panel.js';
+import { boardView, guideView, logsView, mainPanel, parseCustomId, resetView, rolePickView, rolesView, serverModal, serversView, slotView } from './panel.js';
 
 function denied(interaction, gate) {
   return interaction.reply({ content: '⛔ ' + (gate.reason ?? 'Only the Discord server owner can use this.'), flags: MessageFlags.Ephemeral });
@@ -122,6 +122,7 @@ export async function handleSetupComponent(interaction, ctx) {
       if (view === 'roles') await interaction.update(rolesView(config));
       else if (view === 'logs') await interaction.update(logsView(config));
       else if (view === 'servers') await interaction.update(serversView(config, { snapshots }));
+      else if (view === 'board') await interaction.update(boardView(config, { snapshots, guild }));
       else if (view === 'guide') await interaction.update(guideView(config));
       else await interaction.update(mainPanel(config, { snapshots, guild }));
       return true;
@@ -300,6 +301,78 @@ export async function handleSetupComponent(interaction, ctx) {
       await interaction.editReply(mainPanel(updated, { snapshots: ctx.servers.snapshots(guild.id), guild }));
       await interaction.followUp({ embeds: [hintEmbed('⚡ Quick setup', report, status.servers > 0 ? COLORS.success : COLORS.brand)], flags: MessageFlags.Ephemeral });
       await announce(ctx, guild, '⚡ Quick setup used', 'Roles and log channels were filled in automatically where possible.');
+      return true;
+    }
+
+    case 'boardset': {
+      const channelId = interaction.values?.[0] ?? null;
+
+      const updated = await ctx.store.update(guild.id, (next) => {
+        next.board.channelId = channelId;
+        if (!channelId) {
+          next.board.enabled = false;
+          next.board.messageId = null;
+        }
+        return next;
+      });
+
+      // A channel change is also the fix for "the board stopped", so clear the block.
+      ctx.board?.unblock(guild.id);
+      if (channelId) await ctx.board?.syncGuild(guild.id, { force: true }).catch(() => null);
+      await interaction.update(boardView(updated, { snapshots, guild }));
+      return true;
+    }
+
+    case 'boardtoggle': {
+      await interaction.deferUpdate();
+      const turningOn = !config.board?.enabled;
+
+      const updated = await ctx.store.update(guild.id, (next) => {
+        next.board.enabled = turningOn && Boolean(next.board.channelId);
+        return next;
+      });
+
+      ctx.board?.unblock(guild.id);
+      const result = updated.board.enabled ? await ctx.board?.syncGuild(guild.id, { force: true }).catch(() => null) : null;
+
+      await interaction.editReply(boardView(updated, { snapshots, guild }));
+
+      if (updated.board.enabled && result && !result.ok) {
+        await interaction.followUp({
+          embeds: [hintEmbed('⚠️ Could not post there', 'I need **View Channel** and **Send Messages** in <#' + updated.board.channelId + '>. Fix the permissions and press 🔴 Keep it live again.', COLORS.warning)],
+          flags: MessageFlags.Ephemeral,
+        });
+      }
+      return true;
+    }
+
+    case 'boardpost': {
+      await interaction.deferUpdate();
+      ctx.board?.unblock(guild.id);
+      const result = await ctx.board?.syncGuild(guild.id, { force: true }).catch(() => null);
+
+      const body = !result
+        ? 'Live boards are not available on this bot right now.'
+        : result.ok
+          ? result.reason === 'posted'
+            ? 'Posted the board in <#' + config.board.channelId + '>. It updates itself from here.'
+            : 'The board in <#' + config.board.channelId + '> is up to date.'
+          : 'I could not write to <#' + config.board.channelId + '> (' + result.reason + '). Check **View Channel** and **Send Messages** for me there.';
+
+      await interaction.followUp({
+        embeds: [hintEmbed('📌 Live board', body, result && result.ok ? COLORS.success : COLORS.warning)],
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    case 'alertstoggle': {
+      const updated = await ctx.store.update(guild.id, (next) => {
+        next.alerts.enabled = next.alerts?.enabled === false;
+        return next;
+      });
+
+      await interaction.update(boardView(updated, { snapshots, guild }));
       return true;
     }
 

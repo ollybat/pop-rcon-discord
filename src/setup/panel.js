@@ -50,6 +50,7 @@ export function mainPanel(config, { snapshots = [], guild = null } = {}) {
     button(SETUP_ID + ':testlogs', 'Test channels', '🧪', ButtonStyle.Secondary),
     button(SETUP_ID + ':testping', 'Health check', '🏓', ButtonStyle.Secondary),
     button(SETUP_ID + ':guidedm', 'DM me the guide', '📬', ButtonStyle.Secondary),
+    button(SETUP_ID + ':view:board', 'Live board', '📌', ButtonStyle.Primary),
   );
 
   return { embeds: [panelEmbed({ guild, config, snapshots })], components: [top, bottom, tests] };
@@ -122,6 +123,74 @@ export function logsView(config) {
   );
 
   return { embeds: [logsEmbed({ config })], components: rows.slice(0, 5) };
+}
+
+/**
+ * The live board: one message per server that keeps itself current, plus the milestone switches.
+ * Kept in its own view because it is the one part of setup members notice every day.
+ */
+export function boardView(config, { snapshots = [], guild = null } = {}) {
+  const boardConfig = config.board ?? { channelId: null, messageId: null, enabled: false };
+  const alertsOn = config.alerts?.enabled !== false;
+
+  const select = new ChannelSelectMenuBuilder()
+    .setCustomId(SETUP_ID + ':boardset')
+    .setPlaceholder('📌 Channel for the live board')
+    .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    .setMinValues(0)
+    .setMaxValues(1);
+
+  const rows = [
+    new ActionRowBuilder().addComponents(select),
+    new ActionRowBuilder().addComponents(
+      button(SETUP_ID + ':boardtoggle', boardConfig.enabled ? 'Pause it' : 'Keep it live', '🔴', boardConfig.enabled ? ButtonStyle.Secondary : ButtonStyle.Success).setDisabled(
+        !boardConfig.channelId,
+      ),
+      button(SETUP_ID + ':boardpost', 'Post it now', '📤', ButtonStyle.Secondary).setDisabled(!boardConfig.channelId),
+      button(SETUP_ID + ':alertstoggle', alertsOn ? 'Milestones on' : 'Milestones off', alertsOn ? '🔔' : '🔕', alertsOn ? ButtonStyle.Success : ButtonStyle.Secondary),
+      button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary),
+    ),
+  ];
+
+  return { embeds: [boardEmbed({ config, snapshots, guild })], components: rows };
+}
+
+function boardEmbed({ config, snapshots = [] } = {}) {
+  const boardConfig = config.board ?? {};
+  const alertsOn = config.alerts?.enabled !== false;
+  const lines = [];
+
+  if (boardConfig.channelId && boardConfig.enabled) {
+    lines.push('📌 **Live right now** in <#' + boardConfig.channelId + '>.');
+    lines.push(boardConfig.messageId ? 'I will keep that one message up to date, and post a fresh one if somebody deletes it.' : 'It posts on the next pass and then keeps itself current.');
+  } else if (boardConfig.channelId) {
+    lines.push('⏸ **Paused.** The channel is set to <#' + boardConfig.channelId + '> — press 🔴 Keep it live to start it again.');
+  } else {
+    lines.push('**No channel yet.** Pick one above and the board starts on its own.');
+  }
+
+  lines.push(
+    '',
+    '**What it shows** — the same report as /pop: who is online, the queue, uptime, the day\'s peak and the shape of the last few readings.',
+    '',
+    'It refreshes every ' + (config.board?.intervalSeconds ?? 30) + 's, and skips an edit when nothing changed, so a quiet server costs nothing.',
+    'Anyone can also press **🔴 Keep live** on a /pop answer to make that message update itself for a while.',
+    '',
+    (alertsOn
+      ? '🔔 **Milestones on** — a new record for the day, the server filling up and the queue starting are announced in your status log channel.'
+      : '🔕 **Milestones off** — no announcements for records, a full server or a moving queue.'),
+  );
+
+  const servers = snapshots.filter(Boolean).length;
+  if (servers === 0 && boardConfig.channelId) {
+    lines.push('', '⚠️ No server is configured yet, so there is nothing to put on the board — add one under **Servers**.');
+  }
+
+  return hintEmbed(
+    '📌 Live board',
+    lines.join('\n'),
+    boardConfig.enabled && boardConfig.channelId ? COLORS.success : COLORS.brand,
+  );
 }
 
 export function serversView(config, { snapshots = [] } = {}) {
