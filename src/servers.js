@@ -4,6 +4,28 @@ import { configuredServers } from './store.js';
 import { history, slotKey } from './history.js';
 import { stats } from './stats.js';
 
+/**
+ * Rust reports uptime in seconds, so an uptime that went backwards means the server restarted.
+ * A wipe is not reported anywhere, but a save that suddenly holds a fraction of the entities it
+ * did a minute ago is the closest honest signal there is, so it is offered as a hint, not a fact.
+ */
+export function detectRestart(previousInfo, info, at = new Date()) {
+  if (!previousInfo || !info) return null;
+  if (typeof previousInfo.uptime !== 'number' || typeof info.uptime !== 'number') return null;
+  if (!(info.uptime < previousInfo.uptime) || previousInfo.uptime < 120) return null;
+
+  const before = previousInfo.entityCount;
+  const after = info.entityCount;
+  const wiped = typeof before === 'number' && typeof after === 'number' && before > 1000 && after < before / 4;
+
+  return {
+    at: at.toISOString(),
+    wasUpSeconds: previousInfo.uptime,
+    wiped,
+    entityCount: typeof after === 'number' ? after : null,
+  };
+}
+
 export function playerId(entry) {
   const id = entry?.SteamID ?? entry?.SteamId ?? entry?.OwnerSteamID ?? null;
   if (id !== null && id !== undefined && String(id).length > 0) return String(id);
@@ -252,6 +274,11 @@ export class ServerMonitor {
       history.observeRoster(key, players);
       stats.inc('polls');
 
+      // A restart shows up as an uptime that went backwards. The newest restart is kept on the
+      // snapshot so /pop can say "restarted 4 minutes ago" until it stops being news.
+      const restart = detectRestart(this.lastInfo, info) ?? this.snapshot?.restart ?? null;
+      this.lastInfo = info;
+
       this.snapshot = {
         slot: this.slot,
         name: this.server.name,
@@ -263,6 +290,7 @@ export class ServerMonitor {
         latencyMs: Date.now() - started,
         at: new Date().toISOString(),
         error: null,
+        restart,
       };
     } catch (error) {
       this.snapshot = { ...this.snapshot, connected: this.rcon.connected, error: error.message, at: new Date().toISOString() };

@@ -100,6 +100,12 @@ export const config = {
     // Refresh anyway after this long, so "updated 4 minutes ago" never goes stale.
     forceSeconds: Math.max(60, optionalNumber('BOARD_FORCE_SECONDS', 300)),
   },
+  alerts: {
+    // A server has to be unreachable this long before anyone is told. Short blips stay quiet.
+    downAfterMinutes: Math.max(1, optionalNumber('ALERT_DOWN_AFTER_MINUTES', 5)),
+    // Also send the guild owner a direct message when a server goes down and comes back.
+    dmOwner: optionalBoolean('ALERT_DM_OWNER', true),
+  },
   dm: {
     // Answer direct messages and pass them to the clan owners.
     enabled: optionalBoolean('DM_ENABLED', true),
