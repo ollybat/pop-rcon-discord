@@ -109,7 +109,10 @@ function resample(values, width) {
  * A flat series renders as ▄ (there is no shape to show), and an empty series renders as ''.
  */
 export function sparkline(values, { width = null, min = null, max = null } = {}) {
-  const numbers = (Array.isArray(values) ? values : []).map(Number).filter((value) => Number.isFinite(value));
+  const numbers = (Array.isArray(values) ? values : [])
+    .filter((value) => value !== null && value !== undefined && value !== '')
+    .map(Number)
+    .filter((value) => Number.isFinite(value));
   if (numbers.length === 0) return '';
 
   const points = Number.isFinite(width) && width > 1 && numbers.length > width ? resample(numbers, Math.floor(width)) : numbers;
@@ -142,6 +145,7 @@ export function shortTime(value = new Date()) {
 
 /** ▲ +3 / ▼ -2 / ▬ unchanged, for "since the last reading" lines. */
 export function trendArrow(delta) {
+  if (delta === null || delta === undefined || delta === '') return '';
   const value = Number(delta);
   if (!Number.isFinite(value)) return '';
   if (value > 0) return '▲ +' + value;

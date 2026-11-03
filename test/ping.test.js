@@ -41,7 +41,7 @@ test('the health check button exists and reports everything', async () => {
 
   const embed = payload.embeds[0].data;
   assert.match(embed.title, /Pong/);
-  assert.match(embed.description, /42 ms to Discord/);
+  assert.match(embed.description, /42 ms\*\* to Discord/);
 
   const names = embed.fields.map((field) => field.name).join(' | ');
   assert.match(names, /RCON/);
@@ -55,6 +55,8 @@ test('the health check button exists and reports everything', async () => {
 
   const runtime = embed.fields.find((field) => field.name === 'Runtime').value;
   assert.match(runtime, /7 polls/);
+  assert.match(runtime, /MB RAM/, 'the process size is part of the report');
+  assert.match(runtime, /polls every 20s/);
   assert.match(runtime, /1 error/);
 
   const config = embed.fields.find((field) => field.name === 'Configuration').value;

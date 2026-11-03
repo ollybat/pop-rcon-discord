@@ -86,7 +86,7 @@ test('the More/Less button switches the compact view', () => {
 
   const payload = popPayload({ snapshots: [snapshot(1, 12)], config: emptyGuildConfig('g'), details: false, guildId: 'g' });
   const names = payload.embeds[0].data.fields.map((field) => field.name);
-  assert.ok(names.includes('Population'));
+  assert.ok(names.some((name) => name.includes('Population')));
   assert.ok(!names.some((name) => name.includes('Trend')), 'the compact view drops the chart');
 });
 
@@ -97,7 +97,7 @@ test('a server with history shows its direction and shape', async () => {
 
   const payload = popPayload({ snapshots: [snapshot(1, 12)], config: emptyGuildConfig('g'), guildId: 'g' });
   const fields = payload.embeds[0].data.fields;
-  const population = fields.find((field) => field.name === 'Population');
+  const population = fields.find((field) => field.name.includes('Population'));
   assert.match(population.value, /▲ \+3/, 'twelve now against nine a reading ago');
 
   const trend = fields.find((field) => field.name.includes('Trend'));

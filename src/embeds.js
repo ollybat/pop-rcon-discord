@@ -467,7 +467,6 @@ export function pingEmbed({
   if (Number.isFinite(gatewayMs)) parts.push('**' + gatewayMs + ' ms** to Discord');
   parts.push('up **' + duration(uptimeSeconds) + '**');
   parts.push(BRAND.name + ' **' + version + '** on node ' + String(process?.version ?? '').replace(/^v/, ''));
-  if (Number.isFinite(memoryMb)) parts.push(Math.round(memoryMb) + ' MB RAM');
 
   const embed = baseEmbed({ color: COLORS.brandSoft })
     .setTitle('🏓 Pong')
@@ -512,6 +511,7 @@ export function pingEmbed({
 
   const runtime = [];
   if (Number.isFinite(pollSeconds)) runtime.push('polls every ' + pollSeconds + 's');
+  if (Number.isFinite(memoryMb)) runtime.push(Math.round(memoryMb) + ' MB RAM');
   if (stats) {
     runtime.push(stats.polls + ' polls');
     runtime.push(stats.commands + ' commands');
