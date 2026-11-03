@@ -100,6 +100,7 @@ export function createDmRelay({
   const prefix = options.prefix ?? '!';
   const maxLength = options.maxLength ?? MAX_MESSAGE_LENGTH;
   const now = options.now ?? (() => Date.now());
+  const counters = options.stats ?? null;
 
   const replied = new Map();
   const forwarded = new Map();
@@ -192,6 +193,8 @@ export function createDmRelay({
       .send({ embeds: [dmRelayEmbed({ from: message.author, text: truncate(answer, maxLength) })] })
       .catch(() => null);
 
+    if (sent) counters?.inc?.('dmReplied');
+
     await message
       .reply({
         embeds: [
@@ -249,9 +252,11 @@ export function createDmRelay({
         for (const guild of guilds) await logs.staff?.(guild.id, { embeds: [embed()] }).catch(() => false);
       }
 
+      counters?.inc?.('dmForwarded', Math.max(1, delivered));
       logger.info?.('[dm] ' + (help ? 'help request' : 'message') + ' from ' + message.author.username + ' -> ' + delivered + ' owner(s)');
 
       if (wantReply) markReplied(message.author.id, at);
+      if (wantReply) counters?.inc?.('dmAnswered');
       if (wantReply) {
         await message.channel
           .send({ embeds: [dmAutoReplyEmbed({ user: message.author, guilds, prefix, forwarded: delivered > 0, help })] })
@@ -262,6 +267,7 @@ export function createDmRelay({
     }
 
     // Nothing to forward (a stranger, or too many messages): still be polite, once in a while.
+    if (wantReply) counters?.inc?.('dmAnswered');
     if (wantReply) {
       markReplied(message.author.id, at);
       await message.channel

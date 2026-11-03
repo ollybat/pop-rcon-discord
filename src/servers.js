@@ -1,6 +1,8 @@
 import { RustRconClient } from './rcon.js';
 import { normalizeServerInfo } from './presence.js';
 import { configuredServers } from './store.js';
+import { history, slotKey } from './history.js';
+import { stats } from './stats.js';
 
 export function playerId(entry) {
   const id = entry?.SteamID ?? entry?.SteamId ?? entry?.OwnerSteamID ?? null;
@@ -176,6 +178,8 @@ export class ServerMonitor {
   report(error, source) {
     const message = error && error.message ? error.message : String(error);
     this.logger.warn('[server ' + this.slot + '] ' + source + ' failed: ' + message);
+    stats.inc('rconErrors');
+    stats.note(source + ' error on ' + this.server.name + ': ' + message);
     this.onError?.({ server: this.server, source, message });
   }
 
@@ -241,6 +245,13 @@ export class ServerMonitor {
       }
 
       this.players = next;
+
+      // Keep a short in-memory history: /pop reads it for the trend, the shape and the average.
+      const key = slotKey(this.guildId, this.slot);
+      history.push(key, info);
+      history.observeRoster(key, players);
+      stats.inc('polls');
+
       this.snapshot = {
         slot: this.slot,
         name: this.server.name,
