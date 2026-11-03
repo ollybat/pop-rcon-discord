@@ -7,7 +7,7 @@ import { ChannelRelay } from './relay.js';
 import { PresenceManager, aggregateInfos } from './presence.js';
 import { ServerManager } from './servers.js';
 import { commandByName, defaultSlot, describeOptions, dispatch, readOptions, slashCommandData } from './commands.js';
-import { errorEmbed, hintEmbed, outageEmbed, welcomeEmbed } from './embeds.js';
+import { digestEmbed, errorEmbed, hintEmbed, outageEmbed, welcomeEmbed } from './embeds.js';
 import { handlePopComponent } from './pop.js';
 import { handlePingComponent } from './ping.js';
 import { history, slotKey } from './history.js';
@@ -18,6 +18,7 @@ import { createDmRelay } from './dms.js';
 import { createHealthServer } from './web.js';
 import { createBoardManager } from './board.js';
 import { createServerWatch, outageText } from './watch.js';
+import { createDigestRunner, digestFor } from './digest.js';
 import { guildOwnerOf, welcomeOwner } from './onboarding.js';
 import { BRAND, COLORS } from './theme.js';
 
@@ -90,6 +91,15 @@ const watch = createServerWatch({
   downAfterSeconds: config.alerts.downAfterMinutes * 60,
   logger,
   notify: (event) => reportOutage(event),
+});
+
+// The daily digest: yesterday's numbers, once a day, in the channel the guild picked.
+const digestRunner = createDigestRunner({
+  client,
+  store,
+  logger,
+  defaultHour: config.digest.hour,
+  build: ({ config: guildConfig, at }) => ({ embeds: [digestEmbed({ digest: digestFor({ config: guildConfig, at, window: config.digest.window }), config: guildConfig, at })] }),
 });
 
 const startedAt = Date.now();
@@ -538,6 +548,7 @@ client.on('interactionCreate', async (interaction) => {
     dms: { enabled: dms.enabled },
     board,
     watch,
+    digest: digestRunner,
     stats,
   };
 
@@ -772,6 +783,10 @@ async function main() {
   // Post or refresh the boards once at startup, then let the ticker keep them current.
   await board.tick().catch((error) => logger.warn('[board] ' + (error && error.message ? error.message : error)));
   board.start();
+
+  // A digest that was due while the bot was offline still goes out, so a restart at 23:00 is fine.
+  await digestRunner.runDue().catch((error) => logger.warn('[digest] ' + (error && error.message ? error.message : error)));
+  digestRunner.start(60);
 }
 
 client.once('ready', onReady);
@@ -784,6 +799,7 @@ async function shutdown(signal) {
   logger.info('[bot] ' + signal + ' received, shutting down');
   presence.stop();
   board.stop();
+  digestRunner.stop();
   await health.stop().catch(() => {});
   await servers.stopAll().catch(() => {});
   await client.destroy().catch(() => {});
@@ -799,4 +815,4 @@ start().catch((error) => {
   process.exit(1);
 });
 
-export { client, store, servers, logs, presence, relay, board, watch, start, main };
+export { client, store, servers, logs, presence, relay, board, watch, digestRunner, start, main };

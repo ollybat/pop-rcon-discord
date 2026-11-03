@@ -155,11 +155,30 @@ export function boardView(config, { snapshots = [], guild = null } = {}) {
     ),
   ];
 
+  const digestConfig = config.digest ?? { enabled: false, channelId: null, hour: null };
+  const digestSelect = new ChannelSelectMenuBuilder()
+    .setCustomId(SETUP_ID + ':digestset')
+    .setPlaceholder('📊 Channel for the daily digest')
+    .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    .setMinValues(0)
+    .setMaxValues(1);
+
+  rows.push(new ActionRowBuilder().addComponents(digestSelect));
+  rows.push(
+    new ActionRowBuilder().addComponents(
+      button(SETUP_ID + ':digesttoggle', digestConfig.enabled ? 'Digest on' : 'Digest off', '📊', digestConfig.enabled ? ButtonStyle.Success : ButtonStyle.Secondary).setDisabled(!digestConfig.channelId),
+      button(SETUP_ID + ':digesthour', 'Send at ' + String(digestConfig.hour ?? 20).padStart(2, '0') + ':00 UTC', '🕗', ButtonStyle.Secondary),
+      button(SETUP_ID + ':digestpreview', 'Preview it', '👀', ButtonStyle.Secondary),
+      button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary),
+    ),
+  );
+
   return { embeds: [boardEmbed({ config, snapshots, guild })], components: rows };
 }
 
 function boardEmbed({ config, snapshots = [] } = {}) {
   const boardConfig = config.board ?? {};
+  const digestConfig = config.digest ?? {};
   const master = config.alerts?.enabled !== false;
   const milestonesOn = master && config.alerts?.milestones !== false;
   const outageOn = master && config.alerts?.outage !== false;
@@ -188,6 +207,12 @@ function boardEmbed({ config, snapshots = [] } = {}) {
     outageOn
       ? '🚨 **Outages on** — a server that does not answer for 5 minutes is reported once, and once more when it comes back; the server owner also gets a direct message unless DMs are closed.'
       : '🔕 **Outages off** — nothing is said when a server stops answering.',
+    '',
+    digestConfig.enabled
+      ? '📊 **Digest on** at ' + String(digestConfig.hour ?? 20).padStart(2, '0') + ':00 UTC in <#' + digestConfig.channelId + '> — yesterday\'s busiest moment, the week\'s average and the best day so far.'
+      : digestConfig.channelId
+        ? '📊 **Digest paused.** <#' + digestConfig.channelId + '> is ready — press 📊 Digest on to start it.'
+        : '📊 **No digest yet.** Pick a channel below for a short "yesterday on the server" post once a day.',
   );
 
   const servers = snapshots.filter(Boolean).length;

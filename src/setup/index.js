@@ -2,7 +2,8 @@ import { ChannelType, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { BRAND, CATEGORY_PRESET, COLORS, LOG_CHANNEL_PRESETS, LOG_KINDS, LOG_KIND_IDS, logKindById, tierById } from '../theme.js';
 import { MAX_SERVERS, describeConfig, emptyGuildConfig, normalizeServerInput } from '../store.js';
 import { canRunSetup, matchRolesByName } from '../permissions.js';
-import { hintEmbed, statusLogEmbed } from '../embeds.js';
+import { digestEmbed, hintEmbed, statusLogEmbed } from '../embeds.js';
+import { digestFor } from '../digest.js';
 import { sendGuideTo } from '../onboarding.js';
 import { boardView, guideView, logsView, mainPanel, parseCustomId, resetView, rolePickView, rolesView, serverModal, serversView, slotView } from './panel.js';
 
@@ -361,6 +362,57 @@ export async function handleSetupComponent(interaction, ctx) {
 
       await interaction.followUp({
         embeds: [hintEmbed('📌 Live board', body, result && result.ok ? COLORS.success : COLORS.warning)],
+        flags: MessageFlags.Ephemeral,
+      });
+      return true;
+    }
+
+    case 'digestset': {
+      const channelId = interaction.values?.[0] ?? null;
+      const updated = await ctx.store.update(guild.id, (next) => {
+        next.digest.channelId = channelId;
+        if (!channelId) {
+          next.digest.enabled = false;
+          next.digest.lastSent = null;
+        }
+        return next;
+      });
+
+      await interaction.update(boardView(updated, { snapshots, guild }));
+      return true;
+    }
+
+    case 'digesttoggle': {
+      await interaction.deferUpdate();
+      const turningOn = !config.digest?.enabled;
+
+      const updated = await ctx.store.update(guild.id, (next) => {
+        next.digest.enabled = turningOn && Boolean(next.digest.channelId);
+        // Starting it now should not immediately post yesterday's digest to a quiet channel.
+        if (next.digest.enabled) next.digest.lastSent = next.digest.lastSent ?? null;
+        return next;
+      });
+
+      await interaction.editReply(boardView(updated, { snapshots, guild }));
+      return true;
+    }
+
+    case 'digesthour': {
+      const updated = await ctx.store.update(guild.id, (next) => {
+        const current = Number.isInteger(next.digest.hour) ? next.digest.hour : 20;
+        next.digest.hour = (current + 1) % 24;
+        return next;
+      });
+
+      await interaction.update(boardView(updated, { snapshots, guild }));
+      return true;
+    }
+
+    case 'digestpreview': {
+      await interaction.deferUpdate();
+      const preview = digestFor({ config, window: ctx.digestWindow ?? 7 });
+      await interaction.followUp({
+        embeds: [digestEmbed({ digest: preview, config })],
         flags: MessageFlags.Ephemeral,
       });
       return true;
