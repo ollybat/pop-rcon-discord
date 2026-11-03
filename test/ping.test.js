@@ -17,6 +17,13 @@ const snapshots = [
   },
 ];
 
+/** Field names carry an emoji, so match on the part that matters. */
+function fieldValue(embed, needle) {
+  const field = embed.fields.find((candidate) => candidate.name.includes(needle));
+  if (!field) throw new Error('no ' + needle + ' field in ' + embed.fields.map((candidate) => candidate.name).join(', '));
+  return field.value;
+}
+
 function fakeServers() {
   return { refreshGuild: async () => snapshots };
 }
@@ -44,22 +51,23 @@ test('the health check button exists and reports everything', async () => {
   assert.match(embed.description, /42 ms\*\* to Discord/);
 
   const names = embed.fields.map((field) => field.name).join(' | ');
+  assert.equal(names, names, 'field names are readable');
   assert.match(names, /RCON/);
   assert.match(names, /Runtime/);
   assert.match(names, /Configuration/);
 
-  const rcon = embed.fields.find((field) => field.name === 'RCON').value;
+  const rcon = fieldValue(embed, 'RCON');
   assert.match(rcon, /Spinback 5X EU/);
   assert.match(rcon, /90 ms/);
   assert.match(rcon, /12\/100/);
 
-  const runtime = embed.fields.find((field) => field.name === 'Runtime').value;
+  const runtime = fieldValue(embed, 'Runtime');
   assert.match(runtime, /7 polls/);
   assert.match(runtime, /MB RAM/, 'the process size is part of the report');
   assert.match(runtime, /polls every 20s/);
   assert.match(runtime, /1 error/);
 
-  const config = embed.fields.find((field) => field.name === 'Configuration').value;
+  const config = fieldValue(embed, 'Configuration');
   assert.match(config, /1 server configured/);
   assert.ok(!JSON.stringify(embed).includes('secret'), 'never a password');
   assert.ok(!JSON.stringify(embed).includes('1.2.3.4'), 'and never an address');

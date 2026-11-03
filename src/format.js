@@ -155,6 +155,7 @@ export function trendArrow(delta) {
 
 /** "12 of 100 (12%)", without pretending the total is known when it is not. */
 export function percent(value, total) {
+  if (value === null || value === undefined || value === '') return '—';
   const part = Number(value);
   const whole = Number(total);
   if (!Number.isFinite(part)) return '—';
