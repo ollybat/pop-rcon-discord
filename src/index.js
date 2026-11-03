@@ -7,17 +7,18 @@ import { ChannelRelay } from './relay.js';
 import { PresenceManager, aggregateInfos } from './presence.js';
 import { ServerManager } from './servers.js';
 import { commandByName, defaultSlot, describeOptions, dispatch, readOptions, slashCommandData } from './commands.js';
-import { errorEmbed, hintEmbed, welcomeEmbed } from './embeds.js';
+import { errorEmbed, hintEmbed, outageEmbed, welcomeEmbed } from './embeds.js';
 import { handlePopComponent } from './pop.js';
 import { handlePingComponent } from './ping.js';
 import { history, slotKey } from './history.js';
 import { stats } from './stats.js';
 import { handleSetupComponent, handleSetupModal } from './setup/index.js';
-import { welcomeOwner } from './onboarding.js';
 import { parsePrefixCommand } from './prefix.js';
 import { createDmRelay } from './dms.js';
 import { createHealthServer } from './web.js';
 import { createBoardManager } from './board.js';
+import { createServerWatch, outageText } from './watch.js';
+import { guildOwnerOf, welcomeOwner } from './onboarding.js';
 import { BRAND, COLORS } from './theme.js';
 
 const logger = createLogger({ level: config.log.level, timestamps: config.log.timestamps });
@@ -57,7 +58,11 @@ const servers = new ServerManager({
   pollIntervalSeconds: config.poll.intervalSeconds,
   envServer: config.rcon.fromEnv,
   onChat: (guildId, event) => relay.chat(event),
-  onSnapshot: (guildId, snapshot) => recordSnapshot(guildId, snapshot),
+  onSnapshot: (guildId, snapshot) => {
+    // Every snapshot is also an outage check, so a server that dies quietly is still noticed.
+    watch.observe(guildId, snapshot).catch(() => null);
+    return recordSnapshot(guildId, snapshot);
+  },
   onChanges: (guildId, changes) => reportChanges(guildId, changes),
   onStatus: (guildId, status) => reportStatus(guildId, status),
   onError: (guildId, error) =>
@@ -78,6 +83,13 @@ const board = createBoardManager({
   intervalSeconds: config.board.intervalSeconds,
   forceSeconds: config.board.forceSeconds,
   liveMinutes: config.board.liveMinutes,
+});
+
+// Outages that last, and the recovery afterwards. Decided from snapshots, announced once each.
+const watch = createServerWatch({
+  downAfterSeconds: config.alerts.downAfterMinutes * 60,
+  logger,
+  notify: (event) => reportOutage(event),
 });
 
 const startedAt = Date.now();
@@ -164,11 +176,47 @@ function reportChanges(guildId, changes) {
 }
 
 /** Milestone announcements, so a record or a full server is noticed without anyone asking. */
-const milestones = { peakAt: new Map(), full: new Map(), queue: new Map() };
+const milestones = { peakAt: new Map(), full: new Map(), queue: new Map(), restartAt: new Map() };
+
+/**
+ * Tells the guild about an outage or a recovery: the status log channel first, and the owner by
+ * direct message when that is switched on and their DMs are open. The address is never part of
+ * it - the message points at /setup instead.
+ */
+async function reportOutage({ action, guildId, snapshot, seconds }) {
+  const guildConfig = store.get(guildId);
+  if (guildConfig?.alerts?.enabled === false || guildConfig?.alerts?.outage === false) return;
+
+  const down = action === 'down';
+  const name = snapshot?.name || 'Server ' + (snapshot?.slot ?? '?');
+  const embed = outageEmbed({
+    down,
+    name,
+    seconds,
+    error: snapshot?.error ?? null,
+    alertMinutes: config.alerts.downAfterMinutes,
+  });
+
+  if (guildConfig?.logs?.status) logs.status(guildId, { title: embed.title, description: embed.description, color: down ? COLORS.danger : COLORS.success });
+  else logger.info('[alerts] ' + (down ? 'outage' : 'recovery') + ' for ' + name + ' (no status channel set)');
+
+  if (!config.alerts.dmOwner) return;
+
+  const guild = client.guilds.cache.get(guildId) ?? null;
+  const owner = guild ? await guildOwnerOf(guild, { logger }).catch(() => null) : null;
+  if (!owner) return;
+
+  const sent = await owner
+    .send({ embeds: [embed] })
+    .then(() => true)
+    .catch(() => false);
+
+  if (!sent) logger.debug('[alerts] could not DM the owner of ' + guildId + ' about ' + name);
+}
 
 function alertGuild(guildId, payload) {
   const guildConfig = store.get(guildId);
-  if (!guildConfig || guildConfig.alerts?.enabled === false) return null;
+  if (!guildConfig || guildConfig.alerts?.enabled === false || guildConfig.alerts?.milestones === false) return null;
   // Milestones go where the server status goes: no status channel, nothing to interrupt.
   if (!guildConfig.logs?.status) return null;
   return logs.status(guildId, payload);
@@ -194,6 +242,27 @@ function announcePeak(guildId, snapshot, before) {
       oldPeak +
       '. `/ping` has the shape of the day, `/pop` the live count.',
     color: COLORS.success,
+  });
+}
+
+/** A restart is worth one line: it explains why everybody fell off the server list. */
+function announceRestart(guildId, snapshot) {
+  const restart = snapshot?.restart;
+  if (!restart?.at) return;
+
+  const key = guildId + ':' + snapshot.slot;
+  if (milestones.restartAt.get(key) === restart.at) return;
+  milestones.restartAt.set(key, restart.at);
+
+  alertGuild(guildId, {
+    title: '🔄 ' + snapshot.name + ' restarted' + (restart.wiped ? ' — and the save looks fresh' : ''),
+    description:
+      'It had been up ' +
+      outageText(restart.wasUpSeconds) +
+      (restart.wiped
+        ? '. The entity count dropped from a full map to ' + (restart.entityCount ?? 'a fraction of it') + ', which is what a wipe looks like from the outside.'
+        : '. Everything it reported afterwards is on /pop.'),
+    color: restart.wiped ? COLORS.warning : COLORS.brand,
   });
 }
 
@@ -248,6 +317,7 @@ async function recordSnapshot(guildId, snapshot) {
     }
 
     announceCrowd(guildId, snapshot);
+    announceRestart(guildId, snapshot);
   } catch (error) {
     logger.warn('[peaks] ' + (error && error.message ? error.message : error));
   }
@@ -467,6 +537,7 @@ client.on('interactionCreate', async (interaction) => {
     prefixEnabled: config.discord.prefixCommandsEnabled,
     dms: { enabled: dms.enabled },
     board,
+    watch,
     stats,
   };
 
@@ -728,4 +799,4 @@ start().catch((error) => {
   process.exit(1);
 });
 
-export { client, store, servers, logs, presence, relay, board, start, main };
+export { client, store, servers, logs, presence, relay, board, watch, start, main };

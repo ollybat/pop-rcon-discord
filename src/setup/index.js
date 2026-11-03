@@ -368,10 +368,23 @@ export async function handleSetupComponent(interaction, ctx) {
 
     case 'alertstoggle': {
       const updated = await ctx.store.update(guild.id, (next) => {
-        next.alerts.enabled = next.alerts?.enabled === false;
+        next.alerts.milestones = next.alerts?.milestones === false;
         return next;
       });
 
+      await interaction.update(boardView(updated, { snapshots, guild }));
+      return true;
+    }
+
+    case 'outagetoggle': {
+      const updated = await ctx.store.update(guild.id, (next) => {
+        next.alerts.outage = next.alerts?.outage === false;
+        return next;
+      });
+
+      // A change of mind is also the moment to forget an outage in progress, so the next one is
+      // reported freshly rather than staying silent because the bot already spoke once.
+      ctx.watch?.forget(guild.id);
       await interaction.update(boardView(updated, { snapshots, guild }));
       return true;
     }

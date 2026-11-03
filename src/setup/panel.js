@@ -131,7 +131,9 @@ export function logsView(config) {
  */
 export function boardView(config, { snapshots = [], guild = null } = {}) {
   const boardConfig = config.board ?? { channelId: null, messageId: null, enabled: false };
-  const alertsOn = config.alerts?.enabled !== false;
+  const master = config.alerts?.enabled !== false;
+  const milestonesOn = master && config.alerts?.milestones !== false;
+  const outageOn = master && config.alerts?.outage !== false;
 
   const select = new ChannelSelectMenuBuilder()
     .setCustomId(SETUP_ID + ':boardset')
@@ -147,7 +149,8 @@ export function boardView(config, { snapshots = [], guild = null } = {}) {
         !boardConfig.channelId,
       ),
       button(SETUP_ID + ':boardpost', 'Post it now', '📤', ButtonStyle.Secondary).setDisabled(!boardConfig.channelId),
-      button(SETUP_ID + ':alertstoggle', alertsOn ? 'Milestones on' : 'Milestones off', alertsOn ? '🔔' : '🔕', alertsOn ? ButtonStyle.Success : ButtonStyle.Secondary),
+      button(SETUP_ID + ':alertstoggle', milestonesOn ? 'Milestones on' : 'Milestones off', milestonesOn ? '🔔' : '🔕', milestonesOn ? ButtonStyle.Success : ButtonStyle.Secondary),
+      button(SETUP_ID + ':outagetoggle', outageOn ? 'Outages on' : 'Outages off', outageOn ? '🚨' : '🔕', outageOn ? ButtonStyle.Success : ButtonStyle.Secondary),
       button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary),
     ),
   ];
@@ -157,7 +160,9 @@ export function boardView(config, { snapshots = [], guild = null } = {}) {
 
 function boardEmbed({ config, snapshots = [] } = {}) {
   const boardConfig = config.board ?? {};
-  const alertsOn = config.alerts?.enabled !== false;
+  const master = config.alerts?.enabled !== false;
+  const milestonesOn = master && config.alerts?.milestones !== false;
+  const outageOn = master && config.alerts?.outage !== false;
   const lines = [];
 
   if (boardConfig.channelId && boardConfig.enabled) {
@@ -176,9 +181,13 @@ function boardEmbed({ config, snapshots = [] } = {}) {
     'It refreshes every ' + (config.board?.intervalSeconds ?? 30) + 's, and skips an edit when nothing changed, so a quiet server costs nothing.',
     'Anyone can also press **🔴 Keep live** on a /pop answer to make that message update itself for a while.',
     '',
-    (alertsOn
-      ? '🔔 **Milestones on** — a new record for the day, the server filling up and the queue starting are announced in your status log channel.'
-      : '🔕 **Milestones off** — no announcements for records, a full server or a moving queue.'),
+    milestonesOn
+      ? '🔔 **Milestones on** — a new record for the day, the server filling up, the queue starting and a restart are announced in your status log channel.'
+      : '🔕 **Milestones off** — no announcements for records, a full server, a moving queue or a restart.',
+    '',
+    outageOn
+      ? '🚨 **Outages on** — a server that does not answer for 5 minutes is reported once, and once more when it comes back; the server owner also gets a direct message unless DMs are closed.'
+      : '🔕 **Outages off** — nothing is said when a server stops answering.',
   );
 
   const servers = snapshots.filter(Boolean).length;

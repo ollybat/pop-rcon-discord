@@ -1,4 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
+import { fleetVerdict, recentRestart, serverVerdict } from './health.js';
+import { outageText } from './watch.js';
 import { bar, clock, duration, maskPassword, percent, plural, relative, scrubSecrets, shortTime, sparkline, trendArrow, truncate } from './format.js';
 import { history, slotKey } from './history.js';
 import { BRAND, BRAND_LOGO, COLORS, EMOJI, LOG_KINDS, STATUS, TIERS, footerText, tierById } from './theme.js';
@@ -278,6 +280,31 @@ function popServerEmbedBase(snapshot, { showPlayers = true, peak = null, guildId
     embed.addFields({ name: '📈 Trend', value: parts.join('\n'), inline: false });
   }
 
+  // A restart is the one event that explains a vanished population, so it goes on the answer
+  // itself, and it stops being mentioned once it is old news.
+  const restart = recentRestart(snapshot);
+  if (restart && !compact) {
+    embed.addFields({
+      name: '🔄 Restarted',
+      value:
+        '<t:' + Math.floor(restart.at.getTime() / 1000) + ':R>' +
+        ' — it had been up ' + duration(restart.wasUpSeconds) +
+        (restart.wiped ? '\n-# The save holds a fraction of the entities it did before, so this looks like a fresh map.' : ''),
+      inline: false,
+    });
+  }
+
+  const verdict = serverVerdict(snapshot);
+  if (verdict.problems.length > 0 && !compact) {
+    embed.setDescription(
+      truncate(
+        (embed.data.description ? embed.data.description + '\n\n' : '') +
+          '🟠 Working hard — ' + verdict.problems.join(' · ') + '\n-# ' + verdict.hint,
+        4096,
+      ),
+    );
+  }
+
   if (peak && !compact) embed.addFields({ name: 'Peak today', value: peak, inline: false });
   if (showPlayers) embed.addFields(...playerLines(snapshot.players, 20, 4, newcomers));
   return embed;
@@ -466,6 +493,34 @@ export function peakLine(config, slot, max = null) {
  * The /ping dashboard. Everyone who may run it is a clan owner and it is answered privately, so it
  * can talk about roles, channels and counters - but never about a password or an address.
  */
+/**
+ * The one message that says a server stopped answering, and the one that says it is back. It
+ * carries no address and no password - hardly any use to a stranger, plenty to the clan.
+ */
+export function outageEmbed({ down = true, name = 'Server', seconds = 0, error = null, alertMinutes = 5 } = {}) {
+  if (down) {
+    const lines = [
+      'The bot has had no answer for ' + outageText(seconds) + ' (it alerts after ' + alertMinutes + ' minutes).',
+      error ? '\nLast error: `' + truncate(scrubSecrets(String(error)), 200) + '`' : null,
+      '',
+      'The usual causes, in the order worth checking:',
+      '• the server is restarting, or the host is doing maintenance;',
+      '• the RCON port is not reachable from outside (it must be open over **TCP** and must not be the game port);',
+      '• the start line lost `+rcon.web 1`, or the port or password changed.',
+      '',
+      'Everything about the connection lives in `/setup` → Servers, where the **Test** button tells you which of those it is.',
+    ].filter((line) => line !== null);
+
+    return baseEmbed({ color: COLORS.danger })
+      .setTitle('📴 ' + name + ' has not answered for ' + outageText(seconds))
+      .setDescription(truncate(lines.join('\n'), 4096));
+  }
+
+  return baseEmbed({ color: COLORS.success })
+    .setTitle('📡 ' + name + ' is answering again')
+    .setDescription('It was unreachable for ' + outageText(seconds) + '.\n-# `/pop` shows who is on, `/ping` the reading.');
+}
+
 export function pingEmbed({
   gatewayMs = null,
   uptimeSeconds = null,
@@ -487,17 +542,28 @@ export function pingEmbed({
   parts.push('up **' + duration(uptimeSeconds) + '**');
   parts.push(BRAND.name + ' **' + version + '**');
 
+  const roster = Array.isArray(snapshots) ? snapshots : [];
+  const verdicts = roster.map((snapshot) => serverVerdict(snapshot, { now }));
+  const fleet = fleetVerdict(verdicts);
+
   const embed = baseEmbed({ color: COLORS.brandSoft })
     .setTitle('🏓 Pong')
-    .setDescription(parts.join(' • ') + '\n-# checked ' + relative(now));
-
-  const roster = Array.isArray(snapshots) ? snapshots : [];
+    .setDescription(
+      parts.join(' • ') +
+        '\n' +
+        fleet.emoji +
+        ' ' +
+        fleet.label +
+        '\n-# checked ' +
+        relative(now),
+    );
   const serverLines = roster.length
-    ? roster.map((snapshot) => {
+    ? roster.map((snapshot, index) => {
+        const verdict = verdicts[index] ?? serverVerdict(snapshot, { now });
         const name = snapshot.name || 'Server ' + snapshot.slot;
         if (!snapshot.connected) {
           return (
-            STATUS.offline.emoji +
+            verdict.emoji +
             ' **' +
             name +
             '** — offline' +
@@ -512,14 +578,16 @@ export function pingEmbed({
           ? ' • ' + info.players + '/' + info.max + (info.queued ? ' ⏳' + info.queued : '') + ' • up ' + duration(info.uptime)
           : ' • serverinfo did not answer';
         const resting = info?.restarting ? ' ' + STATUS.resting.emoji + ' restarting' : '';
+        const strain = verdict.problems.length > 0 ? '\n-# 🟠 ' + verdict.problems.join(' · ') : '';
         return (
-          STATUS.online.emoji +
+          verdict.emoji +
           ' **' +
           name +
           '** — ' +
           pingText +
           counts +
           resting +
+          strain +
           '\n-# read ' +
           relative(snapshot.at)
         );
