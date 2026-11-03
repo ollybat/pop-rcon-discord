@@ -279,7 +279,9 @@ function popServerEmbedBase(snapshot, { showPlayers = true, peak = null, guildId
   const trend = delta === null ? '' : ' ' + trendArrow(delta);
 
   // Everything that used to be a separate field, on one line, for the compact answer.
-  const facts = ['⏳ ' + info.queued + ' queued', EMOJI.uptime + ' up ' + duration(info.uptime), EMOJI.ping + ' ' + latency];
+  const facts = [];
+  if (info.queued > 0) facts.push('⏳ ' + info.queued + ' queued');
+  facts.push(EMOJI.uptime + ' up ' + duration(info.uptime), EMOJI.ping + ' ' + latency);
 
   if (compact) {
     const verdict = serverVerdict(snapshot);
@@ -290,8 +292,14 @@ function popServerEmbedBase(snapshot, { showPlayers = true, peak = null, guildId
     const running = [];
     if (info.map) running.push(EMOJI.map + ' ' + truncate(String(info.map), 60));
     if (info.framerate !== null && info.framerate !== undefined) running.push(EMOJI.framerate + ' ' + info.framerate + ' fps');
-    if (info.entityCount !== null && info.entityCount !== undefined) running.push('🧱 ' + info.entityCount);
-    if (Number.isFinite(Number(info.memory))) running.push('💾 ' + Math.round(Number(info.memory)) + ' MB');
+    if (info.entityCount !== null && info.entityCount !== undefined) {
+      const entities = Number(info.entityCount);
+      running.push('🧱 ' + (entities >= 10000 ? (entities / 1000).toFixed(1) + 'k' : String(entities)) + ' entities');
+    }
+    if (Number.isFinite(Number(info.memory))) {
+      const mb = Math.round(Number(info.memory));
+      running.push('💾 ' + (mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb + ' MB'));
+    }
 
     embed.setDescription(
       (verdict.problems.length > 0 ? '🟠 ' + verdict.problems.join(' · ') + '\n' : '') +
@@ -306,16 +314,19 @@ function popServerEmbedBase(snapshot, { showPlayers = true, peak = null, guildId
       if (series.length >= 3) {
         const short = [];
         if (average !== null) short.push('avg ' + average);
-        if (busiest) short.push('busiest ' + busiest.players + ' at ' + shortTime(busiest.at));
+        if (busiest) {
+          const when = shortTime(busiest.at);
+          short.push('busiest ' + busiest.players + (when && when !== '—' ? ' at ' + when : ''));
+        }
         lines.push(sparkline(values, { width: 18, min: 0 }));
-        lines.push('**' + (values[values.length - 1] ?? 0) + ' now**' + (short.length ? ' · ' + short.join(' · ') : '') + ' · ' + series.length + ' readings');
+        lines.push('**' + info.players + ' now**' + (short.length ? ' · ' + short.join(' · ') : '') + ' · ' + series.length + ' readings');
       }
       if (peak) lines.push('-# peak ' + peak);
       if (lines.length > 0) embed.addFields({ name: '📈 Trend', value: truncate(lines.join('\n'), 1024), inline: false });
     }
 
     const players = showPlayers ? playerLine(snapshot.players, { newcomers }) : null;
-    if (players) embed.addFields({ name: '👥 ' + info.players + ' online', value: players, inline: false });
+    if (players) embed.addFields({ name: '👥 On right now', value: players, inline: false });
 
     return embed;
   }
