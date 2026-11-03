@@ -132,6 +132,8 @@ test('a notifier that throws does not take the bot down', async () => {
 
   await watch.observe('g', up(1));
   clock = 5000;
+  await watch.observe('g', down(1));
+  clock = 7000;
   const decision = await watch.observe('g', down(1));
   assert.equal(decision.action, 'down');
   assert.equal(warnings.length, 1);

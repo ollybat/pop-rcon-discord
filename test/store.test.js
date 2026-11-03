@@ -230,7 +230,7 @@ test('the history is capped', () => {
 test('the live board is only on when it has a channel', () => {
   const empty = emptyGuildConfig('g');
   assert.deepEqual(empty.board, { channelId: null, messageId: null, enabled: false });
-  assert.deepEqual(empty.alerts, { enabled: true }, 'milestones start on');
+  assert.deepEqual(empty.alerts, { enabled: true, milestones: true, outage: true }, 'the alert switches start on');
 
   const off = normalizeGuildConfig({ board: { channelId: '123456789012345678', enabled: true } }, 'g');
   assert.equal(off.board.channelId, '123456789012345678');

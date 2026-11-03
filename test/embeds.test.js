@@ -430,7 +430,7 @@ test('popServerEmbed mentions a fresh restart and stops mentioning an old one', 
   const fresh = popServerEmbed({ ...base, info, restart: { at: new Date().toISOString(), wasUpSeconds: 82000, wiped: false } });
   const field = fieldNamed(fresh, 'Restarted');
   assert.ok(field, 'the restart is on the answer');
-  assert.match(field.value, /1d 22h/, 'and says how long it had been up');
+  assert.match(field.value, /22h 46m/, 'and says how long it had been up');
 
   const wiped = popServerEmbed({ ...base, info, restart: { at: new Date().toISOString(), wasUpSeconds: 82000, wiped: true, entityCount: 180 } });
   assert.match(fieldNamed(wiped, 'Restarted').value, /looks like a fresh map/);
