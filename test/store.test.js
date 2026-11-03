@@ -286,3 +286,12 @@ test('the digest is off until it has a channel, and its hour is optional', () =>
   assert.equal(junk.digest.hour, null, 'an hour that is not an hour falls back to the default');
   assert.equal(junk.digest.lastSent, null);
 });
+
+test('the in-game chat channel is stored with the other log channels', () => {
+  const config = normalizeGuildConfig({ logs: { chat: '222222222222222222' } }, 'g');
+  assert.equal(config.logs.chat, '222222222222222222');
+  assert.equal(config.logs.errors, null, 'and the rest stay untouched');
+
+  assert.equal(normalizeGuildConfig({}, 'g').logs.chat, null, 'off until a channel is picked');
+  assert.equal(normalizeGuildConfig({ logs: { chat: 'not-a-snowflake' } }, 'g').logs.chat, null);
+});
