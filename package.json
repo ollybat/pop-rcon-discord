@@ -1,6 +1,6 @@
 {
   "name": "pop-rcon-discord",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "description": "Spinback pop bot - live Rust server population in Discord, with /setup, !pop, a record book and an MCP server",
   "type": "module",

@@ -4,6 +4,47 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - every answer is a proper report
+
+### Added
+
+- **Recent history in memory** (`src/history.js`): the last 30 readings per server drive a trend
+  arrow (`▲ +3`), a one-line shape (`▁▂▄▆█`), the average and "busiest in this window". Nothing is
+  written to disk — the durable part is still the daily peak in the guild config.
+- **Runtime counters** (`src/stats.js`): polls, commands, DMs passed on, DMs answered, new peaks,
+  errors and the last failure. They show up in `/ping` and in `/health`.
+- **`/pop` says more**: percentage next to the bar, direction against the previous reading, the
+  recent shape with the average and the busiest moment, memory, and a roster sorted by session
+  length with a latency dot per player plus ✨ for anyone who arrived in the last two minutes.
+- **`/pop` is interactive**: a **More/Less** button switches between the full report and a compact
+  one, next to the existing refresh, server switch and player-list toggles. `/pop` gained a
+  `details` option.
+- **`/ping` became a dashboard**: gateway ping, uptime, build, RAM, node version, every server's
+  RCON round-trip with players/queue/uptime and when it was read, the runtime counters, the last
+  problem, the guild's configuration state and the public URL — including a warning when the URL
+  answers with a **different version** than the one running.
+- **A 🔄 Check again button** on `/ping`, guarded by the same owner/co-owner rule as the command.
+- **🧪 Test channels** in the setup panel (and **Send test** in the Logs view): posts one sample
+  embed per configured log channel and reports which ones worked.
+- **🎯 Next step** in the setup panel, and a live state next to each configured server
+  (🟢 12/100, 🔴 offline).
+- `sparkline`, `relative`, `shortTime`, `trendArrow` and `percent` helpers, plus `versionFrom` for
+  reading the version out of a `/health` body.
+
+### Changed
+
+- Every timestamp in the rich answers is a **Discord timestamp** (`<t:...:R>`), so it reads in the
+  reader's own timezone instead of a UTC string.
+- `/health` now reports `stats` and, per server, the `trend`, `average` and a short `shape` of the
+  recent readings.
+- The setup panel passes live snapshots to its server list, so the panel shows what the servers are
+  doing without leaving the wizard.
+
+### Fixed
+
+- A `null` reading is no longer silently treated as `0` (the sparkline skipped it, the trend arrow
+  read it as "no change" and the percentage printed `0%`).
+
 ## [0.7.0] - direct messages: answer the sender, ask the owners
 
 ### Added

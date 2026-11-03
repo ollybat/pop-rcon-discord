@@ -124,8 +124,8 @@ commands to keep in sync any more.
 | Slash | Prefix | Who | What it does |
 | --- | --- | --- | --- |
 | `/setup` | - | Server owner / bot owner | Opens the setup panel. |
-| `/ping` | **`!ping`** | 👑 Owner / 🛡️ Co-Owner | Health check: Discord gateway ping, every server's RCON round-trip and player count, uptime, build, and your public URL's answer. |
-| - | **`!pop`** | Everyone | Live population, queue, uptime, today's peak and the player list, with buttons to switch server, refresh and hide the list. `!pop 2` opens on one server, `!pop 2 off` hides the names. |
+| `/ping` | **`!ping`** | 👑 Owner / 🛡️ Co-Owner | The dashboard: gateway ping, uptime, build, RAM, every server's RCON round-trip with players and queue, the runtime counters (polls, commands, DMs, errors), the last problem, the configuration state and your public URL's answer - with a 🔄 button to check again. |
+| - | **`!pop`** | Everyone | Live population, queue, uptime, today's peak and the player list, with buttons to switch server, refresh and hide the list. `!pop 2` opens on one server, `!pop 2 off` hides the names, and the **More/Less** button switches between the full report and a compact one. |
 | - | **`!reply`** (in a DM) | 👑 Owner / 🛡️ Co-Owner | Answers somebody who DM'd the bot: `!reply <user id> <your answer>`. Only works for people who wrote in the last 24 hours. |
 
 That is the whole list. The slash menu only ever holds `/setup` - the bot clears anything else it
@@ -134,6 +134,24 @@ may have registered before, so nothing shows up twice.
 `!pop` is public, which is what you want for a population report. It needs
 `PREFIX_COMMANDS_ENABLED=true` (the default) and the **Message Content Intent** enabled in the
 Discord developer portal.
+
+## What a pop answer tells you
+
+Every answer is built from the last reading and from a short history the bot keeps in memory (30
+readings per server, nothing written to disk):
+
+- **how full it is** — the bar, `12/100` and the percentage;
+- **which way it is going** — `▲ +3` against the reading before it;
+- **what the last few minutes looked like** — `▁▂▄▆█`, the average, and the busiest reading in that
+  window with its time;
+- **what the server is running** — map, frame rate, entities, memory;
+- **who is on** — sorted by session length, each with a latency dot (🟢 under 80 ms, 🟡 under 150 ms,
+  🔴 above) and a ✨ for anyone who arrived in the last two minutes;
+- **the day's peak** — with the best recorded day when there is one.
+
+Timestamps are Discord timestamps, so they read in your own timezone. `/ping` adds the bot's own
+counters (polls, commands, DMs passed on, errors) and warns you when the public URL answers with a
+different version than the one running — the usual sign that a redeploy has not happened yet.
 
 ## Direct messages
 
@@ -165,6 +183,12 @@ pointer to the server instead of failing silently.
 | ⌨️ Command Log | Every command: who ran it, their tier, the options, how long it took and any error. |
 | 🚨 Error Log | RCON failures, permission problems and unhandled errors. |
 | 📡 Server Status | Connects and disconnects, plus every change made in `/setup`. |
+
+## Testing the setup
+
+Inside `/setup`, **Test channels** posts one sample embed into every configured log channel and
+tells you which ones it could write to; **Health check** re-reads every server. In the Logs view the
+same test is the **Send test** button. Nothing in a test message is secret.
 
 ## Configuration
 
