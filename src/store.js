@@ -15,6 +15,11 @@ export function emptyGuildConfig(guildId) {
     roles: { owner: null, coOwner: null, headAdmin: null, admin: null, moderator: null },
     logs: { joinLeave: null, commands: null, errors: null, status: null },
     servers: [null, null, null],
+    // The optional live population board: one channel, one message the bot keeps up to date.
+    board: { channelId: null, messageId: null, enabled: false },
+    // Milestone announcements: a new daily peak, the server filling up, a queue forming.
+    alerts: { enabled: true },
+
     // slot -> { day, peak, peakAt }: the busiest moment of the current UTC day.
     stats: {},
     updatedAt: null,
@@ -70,6 +75,15 @@ export function normalizeGuildConfig(raw, guildId) {
       ? { ...cleaned.value, name: String(entry.name ?? '').trim() || cleaned.value.host }
       : null;
   }
+
+  const boardChannel = cleanId(raw.board?.channelId);
+  config.board = {
+    channelId: boardChannel,
+    messageId: cleanId(raw.board?.messageId),
+    // A board without a channel is meaningless, so it is never "on" without one.
+    enabled: raw.board?.enabled === true && Boolean(boardChannel),
+  };
+  config.alerts = { enabled: raw.alerts?.enabled !== false };
 
   config.stats = normalizeStats(raw.stats);
   config.updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : null;

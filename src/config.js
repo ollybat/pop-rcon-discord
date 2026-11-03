@@ -89,6 +89,16 @@ export const config = {
       offline: optionalString('PRESENCE_OFFLINE_FORMAT', DEFAULT_PRESENCE.offline),
       resting: optionalString('PRESENCE_RESTING_FORMAT', DEFAULT_PRESENCE.resting),
     },
+    // Rotate the activity line while the server is online, so it stays worth a glance.
+    rotate: optionalBoolean('PRESENCE_ROTATE', true),
+  },
+  board: {
+    // How often a live population board updates itself, in seconds.
+    intervalSeconds: Math.max(15, optionalNumber('BOARD_INTERVAL_SECONDS', 30)),
+    // How long a message someone made live from /pop keeps refreshing, in minutes.
+    liveMinutes: Math.max(1, optionalNumber('BOARD_LIVE_MINUTES', 20)),
+    // Refresh anyway after this long, so "updated 4 minutes ago" never goes stale.
+    forceSeconds: Math.max(60, optionalNumber('BOARD_FORCE_SECONDS', 300)),
   },
   dm: {
     // Answer direct messages and pass them to the clan owners.

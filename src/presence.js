@@ -28,6 +28,8 @@ export function formatPresence(template, info = {}) {
     queued: info.queued ?? 0,
     joining: info.joining ?? 0,
     uptime: info.uptime ?? '—',
+    peak: info.peak ?? '—',
+    map: info.map ?? '—',
     servers: info.servers ?? '—',
   };
 
@@ -77,6 +79,8 @@ export function aggregateInfos(snapshots) {
       servers: online.length,
       // A map only makes sense for a single server, so it stays null when several are summed.
       map: online.length === 1 ? snapshot.info.map ?? null : null,
+      // The day's peak: the highest of the servers that are online.
+      peak: Math.max(total.peak ?? 0, snapshot.info.peak ?? 0) || null,
       framerate: null,
       entityCount: total.entityCount + (snapshot.info.entityCount ?? 0),
       memory: total.memory + (snapshot.info.memory ?? 0),
@@ -119,6 +123,8 @@ export class PresenceManager {
     this.provider = provider;
     this.options = options;
     this.logger = logger;
+    // Which of the rotating activity frames is next.
+    this.tick = 0;
 
     this.state = null;
     this.text = null;
@@ -158,6 +164,17 @@ export class PresenceManager {
     }
 
     this.info = snapshot.info ?? null;
+
+    // While the server is online the activity line rotates through the extra frames, so the bot's
+    // status is worth a second glance instead of repeating one number forever.
+    const frames = Array.isArray(this.options.rotateFrames) ? this.options.rotateFrames.filter(Boolean) : [];
+    if (frames.length > 1 && snapshot.connected && snapshot.info && !snapshot.info.restarting) {
+      const frame = frames[this.tick % frames.length];
+      this.tick += 1;
+      this.apply(presenceFor(snapshot, { ...this.options, formats: { ...this.options.formats, online: frame } }));
+      return;
+    }
+
     this.apply(presenceFor(snapshot, this.options));
   }
 
