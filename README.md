@@ -17,6 +17,11 @@ server owner a **/setup** wizard plus one headline command for everybody: **!pop
   header line, the recent shape and today's peak, and the whole roster on a single line with session
   lengths. The buttons under it switch server, refresh on demand and hide the list; **More** opens
   the long version (map, FPS, entities, memory, one line per player) and **Less** folds it back.
+- **/lookup** - everything the bot knows, in one answer: the reading, the shape of the last few
+  days, the record book, who is on right now, and (for staff) how the bot itself is wired up.
+  `/lookup alpha` looks up one player, `/lookup 2` opens on one server.
+- **One server only** - the bot answers in the Discord server that owns it and nowhere else. See
+  [One bot, one Discord server](#one-bot-one-discord-server).
 - **A record book** - the busiest moment of every day is remembered per server, per UTC day, for
   90 days, and shown in `!pop` as today's peak.
 - **It says when it stops** - `🔴 Bot stopping` and `🟢 Back online after 8m` in the status channel, so a
@@ -59,8 +64,11 @@ Nothing about the setup is public, and nothing secret ever leaves the container:
 - **The 📡 Server Status channel says a server is connected, never its address.**
 - **The public health endpoint** (`/health`) only ever returns: bot tag, version, uptime, gateway
   ping, guild count and per-server player counts. No host, no port, no password.
-- **`!pop` is public on purpose** - population is for the whole clan - and it contains no server
-  address and no secret.
+- **`!pop` and `/lookup` are public on purpose** - the population and the record book are for the
+  whole clan - and neither contains a server address or a secret. The part of `/lookup` that shows
+  your roles and channels is printed only for 👑 Owner and 🛡️ Co-Owner.
+- **Other Discord servers get a refusal, not a service.** The `🔒` card says the bot belongs to one
+  server, nothing from the stranger is stored, and the host log records that it was turned away.
 
 ## Requirements
 
@@ -129,15 +137,36 @@ commands to keep in sync any more.
 | --- | --- | --- | --- |
 | `/setup` | - | Server owner / bot owner | Opens the setup panel. |
 | `/ping` | **`!ping`** | 👑 Owner / 🛡️ Co-Owner | The dashboard: gateway ping, uptime, build, RAM, every server's RCON round-trip with players and queue, the runtime counters (polls, commands, DMs, errors), the last problem, the configuration state and your public URL's answer - with a 🔄 button to check again. |
+| `/lookup` | **`!lookup`** | Everyone | The dossier: live reading, trend line, record book, the whole roster and (for 👑/🛡️) how the bot is configured here. `lookup player:<name>` finds one player by name, `lookup server:2` opens on one server, and `!lookup 2` is the same thing in prefix form. |
 | - | **`!pop`** | Everyone | Live population, queue, uptime, today's peak and the player list, with buttons to switch server, refresh and hide the list. `!pop 2` opens on one server, `!pop 2 off` hides the names, and the **More/Less** button switches between the full report and a compact one. |
 | - | **`!reply`** (in a DM) | 👑 Owner / 🛡️ Co-Owner | Answers somebody who DM'd the bot: `!reply <user id> <your answer>`. Only works for people who wrote in the last 24 hours. |
 
-That is the whole list. The slash menu only ever holds `/setup` - the bot clears anything else it
-may have registered before, so nothing shows up twice.
+That is the whole list. The slash menu holds `/setup`, `/lookup` and `/ping`; `!pop` stays prefix
+only on purpose. The bot clears anything else it may have registered before, so nothing shows up
+twice.
 
 `!pop` is public, which is what you want for a population report. It needs
 `PREFIX_COMMANDS_ENABLED=true` (the default) and the **Message Content Intent** enabled in the
 Discord developer portal.
+
+## One bot, one Discord server
+
+The bot serves exactly one Discord server at a time, so an invite from somewhere else is a
+no-op rather than a second tenant. There are two ways to say which server that is:
+
+| | |
+| --- | --- |
+| **`ALLOWED_GUILD_IDS`** | The exact server id(s), comma separated. The strictest answer, and the one to use when you know it. |
+| **A saved `/setup`** | Leave `ALLOWED_GUILD_IDS` empty and the bot locks itself to the server whose configuration has been saved. Before anything is saved it is **open**, because nobody has claimed it yet - the first `/setup` claims it, no restart needed. |
+| **`LEAVE_UNKNOWN_GUILDS=true`** | Optional, and off by default: the bot also leaves any other server it is invited to, instead of only refusing to work there. |
+
+What a stranger's server sees: one private `🔒 This bot belongs to one server` card if somebody
+runs a command there, and if the bot is invited it answers in the system channel instead of
+sending the setup guide. What it does **not** do: store a configuration for that server, relay
+its channels, answer `!pop`, or ask for a server address. The host log gets one `[access]` line.
+
+If two servers ever have a saved setup, the bot logs a warning naming `ALLOWED_GUILD_IDS` - that
+is the case where you want to be explicit rather than rely on the claim.
 
 ## When the bot is invited
 
@@ -282,6 +311,8 @@ advanced shortcut that pre-fills server slot 1 before the first `/setup`.
 | `PREFIX_COMMANDS_ENABLED` | `true` | Enable `!prefix` commands. |
 | `PREFIX` | `!` | The prefix character. |
 | `BOT_OWNER_IDS` | - | User ids that may also run `/setup`, comma separated. |
+| `ALLOWED_GUILD_IDS` | - | The Discord server id(s) this bot serves, comma separated. Empty means it locks itself to the server whose `/setup` is saved. |
+| `LEAVE_UNKNOWN_GUILDS` | `false` | Also leave a server the bot was invited to but does not serve, instead of only refusing to work there. |
 | `RCON_HOST`, `RCON_PORT`, `RCON_PASSWORD`, `RCON_NAME` | - | Shortcut for server slot 1. |
 | `RCON_TIMEOUT_MS` | `15000` | How long one RCON command may take. |
 | `RCON_MAX_RECONNECT_DELAY_MS` | `30000` | Ceiling for the reconnect backoff. |

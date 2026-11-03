@@ -23,6 +23,7 @@ import { createBoardManager } from './board.js';
 import { createServerWatch, outageText } from './watch.js';
 import { createDigestRunner, digestFor } from './digest.js';
 import { guildOwnerOf, welcomeOwner } from './onboarding.js';
+import { createGuildGate, lockedEmbed } from './access.js';
 import { BRAND, COLORS } from './theme.js';
 
 const logger = createLogger({ level: config.log.level, timestamps: config.log.timestamps });
@@ -36,6 +37,25 @@ if (config.discord.prefixCommandsEnabled || config.dm.enabled) {
 const client = new Client({ intents, partials: [Partials.Channel] });
 
 const store = new GuildStore({ dir: config.data.dir, logger });
+// One bot, one Discord server: the gate every guild-shaped event asks before doing anything.
+const gate = createGuildGate({
+  store,
+  logger,
+  allowed: config.access.allowedGuildIds,
+  leaveUnknown: config.access.leaveUnknown,
+  brand: BRAND.name,
+});
+
+// A fresh /setup claims (or re-claims) the bot without a restart: the lock follows the store.
+for (const method of ['save', 'update']) {
+  const original = store[method].bind(store);
+  store[method] = async (...args) => {
+    const result = await original(...args);
+    gate.refresh();
+    return result;
+  };
+}
+
 const logs = new LogRouter({
   client,
   store,
@@ -152,6 +172,7 @@ function healthStatus() {
     uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
     gatewayPingMs: Number.isFinite(client.ws?.ping) ? client.ws.ping : null,
     guilds: client.guilds.cache.size,
+    access: { mode: gate.lock.mode, servers: gate.lock.ids.size },
     servers: roster,
     stats: (() => {
       const snapshot = stats.snapshot();
@@ -554,6 +575,18 @@ client.on('interactionCreate', async (interaction) => {
     return;
   }
 
+  // Another server's bot: say so once, nicely, and do nothing else.
+  const access = gate.check(interaction.guildId);
+  if (!access.allowed) {
+    const embed = lockedEmbed({ lock: gate.lock, guild: interaction.guild, brand: BRAND.name });
+    if (interaction.isRepliable()) {
+      const payload = { embeds: [embed], flags: MessageFlags.Ephemeral };
+      await (interaction.deferred || interaction.replied ? interaction.followUp(payload) : interaction.reply(payload)).catch(() => {});
+    }
+    logger.warn?.('[access] ignored ' + (interaction.guild?.name ?? interaction.guildId ?? 'a DM') + ' (' + access.reason + ')');
+    return;
+  }
+
   const ctx = {
     store,
     servers,
@@ -659,6 +692,15 @@ client.on('messageCreate', async (message) => {
       return;
     }
 
+    // A command is the only thing in another server worth answering.
+    if (!gate.allows(message.guild.id)) {
+      await message
+        .reply({ embeds: [lockedEmbed({ lock: gate.lock, guild: message.guild, brand: BRAND.name })] })
+        .catch(() => {});
+      logger.warn?.('[access] ignored a command in ' + message.guild.name + ' (' + message.guild.id + ')');
+      return;
+    }
+
     if (!store.has(message.guild.id)) await store.load(message.guild.id);
     await runCommand(command, {
       source: 'prefix',
@@ -679,8 +721,14 @@ client.on('messageCreate', async (message) => {
 const welcomed = new Set();
 
 client.on('guildCreate', async (guild) => {
-  // First thing: the owner gets the guide in their DMs, because that is the whole point of being
-  // invited. A closed DM is answered in the server instead, never silently dropped.
+  // One bot, one Discord server: anybody else is told, and nothing of theirs is stored.
+  if (!gate.allows(guild.id)) {
+    await gate.turnAway(guild);
+    return;
+  }
+
+  // The owner gets the guide in their DMs, because that is the whole point of being invited. A
+  // closed DM is answered in the server instead, never silently dropped.
   const onboarding = await welcomeOwner({
     client,
     guild,
