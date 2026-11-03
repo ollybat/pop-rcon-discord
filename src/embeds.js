@@ -193,6 +193,33 @@ export function playerLines(players = [], perField = 20, maxFields = 4, newcomer
   });
 }
 
+/**
+ * The compact player list: one line instead of one line per player, so a full server still fits in
+ * a message people will actually read. Names keep their session length, newcomers keep their ✨, and
+ * a poor connection keeps its dot - the everyday green dots are what gets dropped, not the warning.
+ */
+export function playerLine(players = [], { limit = 14, newcomers = null } = {}) {
+  const list = Array.isArray(players) ? players : [];
+  if (list.length === 0) return null;
+
+  const roster = [...list].sort((a, b) => (Number(b?.seconds) || 0) - (Number(a?.seconds) || 0));
+  const fresh = newcomers instanceof Set ? newcomers : null;
+  const shown = roster.slice(0, Math.max(1, limit));
+
+  const names = shown.map((player) => {
+    const who = player?.name || player?.id || 'unknown';
+    const time = player?.seconds === null || player?.seconds === undefined ? '' : ' (' + duration(player.seconds) + ')';
+    const star = fresh && fresh.has(String(player?.id ?? '')) ? '✨' : '';
+    const ping = Number(player?.ping);
+    const warn = Number.isFinite(ping) && ping >= 150 ? ' 🔴' : Number.isFinite(ping) && ping >= 80 ? ' 🟡' : '';
+    return star + '**' + who + '**' + time + warn;
+  });
+
+  const remaining = roster.length - shown.length;
+  const tail = remaining > 0 ? ' *…and ' + remaining + ' more*' : '';
+  return truncate(names.join(' · ') + tail, 1000);
+}
+
 /** A latency dot: green under 80 ms, yellow under 150 ms, red above. */
 function pingBadgeFor(ping) {
   const value = Number(ping);
@@ -250,6 +277,48 @@ function popServerEmbedBase(snapshot, { showPlayers = true, peak = null, guildId
 
   const latency = snapshot.latencyMs === null || snapshot.latencyMs === undefined ? '—' : snapshot.latencyMs + ' ms';
   const trend = delta === null ? '' : ' ' + trendArrow(delta);
+
+  // Everything that used to be a separate field, on one line, for the compact answer.
+  const facts = ['⏳ ' + info.queued + ' queued', EMOJI.uptime + ' up ' + duration(info.uptime), EMOJI.ping + ' ' + latency];
+
+  if (compact) {
+    const verdict = serverVerdict(snapshot);
+    const restart = recentRestart(snapshot);
+    if (restart) facts.push('🔄 restarted <t:' + Math.floor(restart.at.getTime() / 1000) + ':R>');
+    if (info.players === 0) facts.push('nobody on');
+
+    const running = [];
+    if (info.map) running.push(EMOJI.map + ' ' + truncate(String(info.map), 60));
+    if (info.framerate !== null && info.framerate !== undefined) running.push(EMOJI.framerate + ' ' + info.framerate + ' fps');
+    if (info.entityCount !== null && info.entityCount !== undefined) running.push('🧱 ' + info.entityCount);
+    if (Number.isFinite(Number(info.memory))) running.push('💾 ' + Math.round(Number(info.memory)) + ' MB');
+
+    embed.setDescription(
+      (verdict.problems.length > 0 ? '🟠 ' + verdict.problems.join(' · ') + '\n' : '') +
+        facts.join(' · ') +
+        (running.length > 0 ? '\n-# ' + running.join(' · ') : ''),
+    );
+
+    embed.addFields({ name: '👥 Population', value: bar(info.players, info.max, 16) + trend, inline: false });
+
+    if (series.length >= 3 || peak) {
+      const lines = [];
+      if (series.length >= 3) {
+        const short = [];
+        if (average !== null) short.push('avg ' + average);
+        if (busiest) short.push('busiest ' + busiest.players + ' at ' + shortTime(busiest.at));
+        lines.push(sparkline(values, { width: 18, min: 0 }));
+        lines.push('**' + (values[values.length - 1] ?? 0) + ' now**' + (short.length ? ' · ' + short.join(' · ') : '') + ' · ' + series.length + ' readings');
+      }
+      if (peak) lines.push('-# peak ' + peak);
+      if (lines.length > 0) embed.addFields({ name: '📈 Trend', value: truncate(lines.join('\n'), 1024), inline: false });
+    }
+
+    const players = showPlayers ? playerLine(snapshot.players, { newcomers }) : null;
+    if (players) embed.addFields({ name: '👥 ' + info.players + ' online', value: players, inline: false });
+
+    return embed;
+  }
 
   embed.addFields({
     name: '👥 Population',
@@ -314,6 +383,7 @@ function popServerEmbedBase(snapshot, { showPlayers = true, peak = null, guildId
  * the busiest moment of the day when the guild config knows it.
  */
 export function popSummaryEmbedBase({
+  compact = false,
   totalPlayers,
   totalMax,
   onlineServers,
@@ -357,7 +427,7 @@ export function popSummaryEmbedBase({
             (server.queued ? ' ⏳' + server.queued : '')
           : STATUS[state].label.toLowerCase();
 
-      const spark = server.spark ? '\n' + server.spark : '';
+      const spark = !compact && server.spark ? '\n' + server.spark : '';
       return { name: STATUS[state].emoji + ' ' + truncate(server.name || 'Server ' + server.slot, 200), value: detail + spark, inline: true };
     });
 

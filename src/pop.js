@@ -112,6 +112,7 @@ export function popPayload({
 
     embeds.push(
       popSummaryEmbed({
+        compact: !details,
         totalPlayers: online.reduce((sum, snapshot) => sum + snapshot.info.players, 0),
         totalMax: online.reduce((sum, snapshot) => sum + snapshot.info.max, 0),
         note,

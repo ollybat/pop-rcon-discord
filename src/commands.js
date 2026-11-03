@@ -49,7 +49,7 @@ export const commands = [
       )
       .addBooleanOption((option) => option.setName('players').setDescription('List the player names (default true)').setRequired(false))
       .addBooleanOption((option) =>
-        option.setName('details').setDescription('Show the map, FPS, entities and the recent trend (default true)').setRequired(false),
+        option.setName('details').setDescription('The long version: extra fields and the full player list (default false)').setRequired(false),
       ),
     async run(ctx) {
       const slot = ctx.options.integer('server');
@@ -68,7 +68,7 @@ export const commands = [
           snapshots,
           config: ctx.guildConfig,
           showPlayers,
-          details: ctx.options.boolean('details') ?? true,
+          details: ctx.options.boolean('details') ?? false,
           focus: slot,
           guildId: ctx.guild.id,
           pollSeconds: ctx.pollSeconds,
