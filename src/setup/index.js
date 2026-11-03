@@ -5,7 +5,20 @@ import { canRunSetup, matchRolesByName } from '../permissions.js';
 import { digestEmbed, hintEmbed, statusLogEmbed } from '../embeds.js';
 import { digestFor } from '../digest.js';
 import { sendGuideTo } from '../onboarding.js';
-import { boardView, guideView, logsView, mainPanel, parseCustomId, resetView, rolePickView, rolesView, serverModal, serversView, slotView } from './panel.js';
+import {
+  boardView,
+  guideView,
+  logsView,
+  mainPanel,
+  parseCustomId,
+  resetView,
+  rolePickView,
+  rolesView,
+  serverModal,
+  serversView,
+  slotView,
+  statusView,
+} from './panel.js';
 
 function denied(interaction, gate) {
   return interaction.reply({ content: '⛔ ' + (gate.reason ?? 'Only the Discord server owner can use this.'), flags: MessageFlags.Ephemeral });
@@ -103,6 +116,16 @@ async function testLogChannels(guild, config) {
   return { sent, failed };
 }
 
+/** The status line view, drawn with the same formats the presence itself uses. */
+function statusPayload(ctx, guild, config) {
+  return statusView(config, {
+    snapshots: ctx.servers.snapshots(guild.id),
+    guild,
+    formats: ctx.presence?.options?.formats ?? undefined,
+    slot: ctx.presence?.options?.slot ?? null,
+  });
+}
+
 export async function handleSetupComponent(interaction, ctx) {
   const parsed = parseCustomId(interaction.customId);
   if (!parsed) return false;
@@ -124,6 +147,7 @@ export async function handleSetupComponent(interaction, ctx) {
       else if (view === 'logs') await interaction.update(logsView(config));
       else if (view === 'servers') await interaction.update(serversView(config, { snapshots }));
       else if (view === 'board') await interaction.update(boardView(config, { snapshots, guild }));
+      else if (view === 'status') await interaction.update(statusPayload(ctx, guild, config));
       else if (view === 'guide') await interaction.update(guideView(config));
       else await interaction.update(mainPanel(config, { snapshots, guild }));
       return true;
@@ -302,6 +326,28 @@ export async function handleSetupComponent(interaction, ctx) {
       await interaction.editReply(mainPanel(updated, { snapshots: ctx.servers.snapshots(guild.id), guild }));
       await interaction.followUp({ embeds: [hintEmbed('⚡ Quick setup', report, status.servers > 0 ? COLORS.success : COLORS.brand)], flags: MessageFlags.Ephemeral });
       await announce(ctx, guild, '⚡ Quick setup used', 'Roles and log channels were filled in automatically where possible.');
+      return true;
+    }
+
+    case 'statustoggle': {
+      await interaction.deferUpdate();
+
+      const updated = await ctx.store.update(guild.id, (next) => {
+        next.presence.problem = next.presence?.problem === false;
+        return next;
+      });
+
+      // The line is redrawn on the next poll anyway; this just skips the wait.
+      await ctx.presence?.refresh().catch(() => null);
+
+      await interaction.editReply(statusPayload(ctx, guild, updated));
+      return true;
+    }
+
+    case 'statusrefresh': {
+      await interaction.deferUpdate();
+      await ctx.presence?.refresh().catch(() => null);
+      await interaction.editReply(statusPayload(ctx, guild, config));
       return true;
     }
 

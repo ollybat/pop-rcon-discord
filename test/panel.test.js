@@ -11,6 +11,7 @@ import {
   serverModal,
   serversView,
   slotView,
+  statusView,
 } from '../src/setup/panel.js';
 import { emptyGuildConfig, normalizeGuildConfig } from '../src/store.js';
 
@@ -70,6 +71,7 @@ const views = {
   serversView: (config) => serversView(config, { snapshots: [snapshot] }),
   slotView: (config) => slotView(config, 1, snapshot),
   boardView: (config) => boardView(config, { snapshots: [snapshot] }),
+  statusView: (config) => statusView(config, { snapshots: [snapshot], slot: 1 }),
   guideView: (config) => guideView(config),
   resetView: (config) => resetView(config),
 };
@@ -96,6 +98,36 @@ test('no view breaks the five rows of five that Discord allows', () => {
       assert.ok(size >= 1 && size <= 5, name + ' has a row of ' + size);
     }
   }
+});
+
+test('the status view shows the live line, the whole vocabulary and the PROBLEM switch', () => {
+  const on = statusView(full, { snapshots: [snapshot], slot: 1 });
+  const body = on.embeds[0].data;
+
+  assert.match(body.title, /Status line/);
+  assert.match(body.description, /🟢 RCON ┆👥 3\/100┆⏳Q: 0/, 'the live line is drawn from the same code the bio uses');
+  assert.match(body.description, /Following slot 1/);
+
+  const vocabulary = body.fields.find((field) => field.name.includes('vocabulary')).value;
+  for (const line of ['🟢 RCON ┆👥 12/100┆⏳Q: 5', '🛑 RCON ┆ OFFLINE', '⏳ RCON ┆ RESTING', '⚠️ RCON ┆ PROBLEM']) {
+    assert.ok(vocabulary.includes(line), 'missing from the vocabulary: ' + line);
+  }
+
+  const ids = customIds(on);
+  for (const expected of ['sb:setup:statustoggle', 'sb:setup:statusrefresh', 'sb:setup:main']) {
+    assert.ok(ids.includes(expected), expected + ' is missing');
+  }
+
+  // The switch reads the saved setting, and says so.
+  const off = statusView({ ...full, presence: { problem: false } }, { snapshots: [snapshot] });
+  const offBody = off.embeds[0].data;
+  assert.match(offBody.fields.find((field) => field.name.includes('PROBLEM mode')).name, /off/);
+  assert.match(offBody.fields.find((field) => field.name.includes('vocabulary')).value, /\(switched off\)/);
+});
+
+test('the main panel offers the status line', () => {
+  const ids = customIds(mainPanel(full, { snapshots: [snapshot] }));
+  assert.ok(ids.includes('sb:setup:view:status'), 'the Status line button is missing');
 });
 
 test('the board view keeps one Back button and the digest controls', () => {

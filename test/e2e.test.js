@@ -14,9 +14,10 @@ const presenceOptions = {
   intervalSeconds: 5,
   restingOnReconnect: false,
   formats: {
-    online: '🟢 RCON┆👥  {players}/{max} ⏳{queued}/{joining}',
-    offline: '🔴 RCON┆OFFLINE',
-    resting: '🟡 RCON┆RESTING',
+    online: '🟢 RCON ┆👥 {players}/{max}┆⏳Q: {queued}',
+    offline: '🛑 RCON ┆ OFFLINE',
+    resting: '⏳ RCON ┆ RESTING',
+    problem: '⚠️ RCON ┆ PROBLEM',
   },
 };
 
@@ -149,12 +150,12 @@ test('the bot follows a Rust server end to end', async (t) => {
 
   await presence.refresh();
   assert.equal(presence.state, STATE.ONLINE);
-  assert.equal(applied.at(-1).activities[0].name, '🟢 RCON┆👥  0/100 ⏳1/2');
+  assert.equal(applied.at(-1).activities[0].name, '🟢 RCON ┆👥 0/100┆⏳Q: 1');
 
   // The server goes away: the presence falls back to offline.
   await mock.close();
   await waitFor(() => !manager.monitorFor('guild-1', 1).connected);
   await presence.refresh();
   assert.equal(presence.state, STATE.OFFLINE);
-  assert.equal(applied.at(-1).activities[0].name, '🔴 RCON┆OFFLINE');
+  assert.equal(applied.at(-1).activities[0].name, '🛑 RCON ┆ OFFLINE');
 });

@@ -11,8 +11,9 @@ import {
   TextInputStyle,
 } from 'discord.js';
 import { guideEmbed, hintEmbed, logsEmbed, panelEmbed, rolesEmbed, serversEmbed } from '../embeds.js';
-import { BRAND, COLORS, LOG_KINDS, STATUS, TIERS, tierById } from '../theme.js';
+import { BRAND, COLORS, LOG_KINDS, PRESENCE_LINES, STATUS, TIERS, tierById } from '../theme.js';
 import { maskPassword } from '../format.js';
+import { formatPresence, presenceFor } from '../presence.js';
 import { MAX_SERVERS, describeConfig } from '../store.js';
 
 export const SETUP_ID = 'sb:setup';
@@ -51,6 +52,7 @@ export function mainPanel(config, { snapshots = [], guild = null } = {}) {
     button(SETUP_ID + ':testping', 'Health check', '🏓', ButtonStyle.Secondary),
     button(SETUP_ID + ':guidedm', 'DM me the guide', '📬', ButtonStyle.Secondary),
     button(SETUP_ID + ':view:board', 'Live board', '📌', ButtonStyle.Primary),
+    button(SETUP_ID + ':view:status', 'Status line', '🟢', ButtonStyle.Primary),
   );
 
   return { embeds: [panelEmbed({ guild, config, snapshots })], components: [top, bottom, tests] };
@@ -329,6 +331,78 @@ export function serverModal(slot, server = null) {
       new ActionRowBuilder().addComponents(port),
       new ActionRowBuilder().addComponents(password),
     );
+}
+
+/**
+ * The bot's own bio: the four lines it may wear, the one it wears right now, and the switch that
+ * adds the PROBLEM state. A preview beats a description, so the live line is drawn by the very same
+ * code the presence uses.
+ */
+export function statusView(config, { snapshots = [], guild = null, formats = PRESENCE_LINES, slot = null } = {}) {
+  const problemOn = config?.presence?.problem !== false;
+  const live = presenceFor(snapshotFor(snapshots), { formats, problem: problemOn });
+  const status = STATUS[live.state] ?? STATUS.online;
+
+  const vocabulary = ['online', 'offline', 'resting', 'problem']
+    .map((state) =>
+      !problemOn && state === 'problem'
+        ? STATUS.problem.emoji + ' RCON ┆ PROBLEM  (switched off)'
+        : formatPresence(formats[state] ?? PRESENCE_LINES[state], { players: 12, max: 100, queued: 5 }),
+    )
+    .join('\n');
+
+  const problems = problemOn
+    ? [
+        '**On.** The line turns ' + STATUS.problem.emoji + ' while the server is reachable but not healthy:',
+        '• RCON answers, but the server never replies to `serverinfo`',
+        '• the map is running under 20 FPS',
+        '• an RCON round-trip takes longer than 1.5 s',
+      ]
+    : [
+        '**Off.** A reachable-but-slow server keeps the ' + STATUS.online.emoji + ' line, and a socket that never answers reads as ' + STATUS.offline.emoji + ' OFFLINE.',
+        'Press ' + STATUS.problem.emoji + ' **PROBLEM on** to add the fourth state.',
+      ];
+
+  return {
+    embeds: [
+      hintEmbed(
+        status.emoji + ' Status line — what this bot is doing, in one glance',
+        [
+          'This line is the bot\'s own bio, right under its name in the member list. It only ever says one of the four below, so a glance is never ambiguous about the server.',
+          '',
+          '**It says this right now:**',
+          '```',
+          live.text,
+          '```',
+          '-# ' + (slot ? 'Following slot ' + slot : 'Following every server that is online') + ' · rewritten on every poll, in a private channel or in public: it never carries an address.',
+        ].join('\n'),
+        status.color,
+      )
+        .addFields(
+          { name: '📖 The whole vocabulary', value: '```\n' + vocabulary + '\n```', inline: false },
+          { name: STATUS.problem.emoji + ' PROBLEM mode — ' + (problemOn ? 'on' : 'off'), value: problems.join('\n'), inline: false },
+        ),
+    ],
+    components: [
+      new ActionRowBuilder().addComponents(
+        button(SETUP_ID + ':statustoggle', problemOn ? 'PROBLEM off' : 'PROBLEM on', STATUS.problem.emoji, problemOn ? ButtonStyle.Secondary : ButtonStyle.Success),
+        button(SETUP_ID + ':statusrefresh', 'Say it again', '🔄', ButtonStyle.Secondary),
+        button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary),
+      ),
+    ],
+  };
+}
+
+/** The snapshot the line is actually drawn from: the first online one, or the first at all. */
+function snapshotFor(snapshots = []) {
+  const list = snapshots ?? [];
+  return list.find((snapshot) => snapshot?.connected && snapshot.info) ?? list[0] ?? { connected: false, reconnecting: false, info: null };
+}
+
+/** The snapshot the line is actually drawn from: the first online one, or the first at all. */
+function snapshotFor(snapshots = []) {
+  const list = snapshots ?? [];
+  return list.find((snapshot) => snapshot?.connected && snapshot.info) ?? list[0] ?? { connected: false, reconnecting: false, info: null };
 }
 
 export function guideView(config) {
