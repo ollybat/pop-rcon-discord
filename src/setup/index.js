@@ -8,6 +8,7 @@ import { sendGuideTo } from '../onboarding.js';
 import {
   boardView,
   guideView,
+  logPickView,
   logsView,
   mainPanel,
   parseCustomId,
@@ -484,6 +485,26 @@ export async function handleSetupComponent(interaction, ctx) {
       // reported freshly rather than staying silent because the bot already spoke once.
       ctx.watch?.forget(guild.id);
       await interaction.update(boardView(updated, { snapshots, guild }));
+      return true;
+    }
+
+    case 'logpick': {
+      await interaction.update(logPickView(config, interaction.values?.[0] ?? null));
+      return true;
+    }
+
+    case 'logclearone': {
+      const kind = logKindById(args[0]);
+      if (!kind) {
+        await interaction.update(logsView(config));
+        return true;
+      }
+
+      const cleared = await ctx.store.update(guild.id, (next) => {
+        next.logs[kind.id] = null;
+        return next;
+      });
+      await interaction.update(logPickView(cleared, kind.id));
       return true;
     }
 

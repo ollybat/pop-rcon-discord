@@ -50,12 +50,17 @@ export function mainPanel(config, { snapshots = [], guild = null } = {}) {
   const tests = new ActionRowBuilder().addComponents(
     button(SETUP_ID + ':testlogs', 'Test channels', '🧪', ButtonStyle.Secondary),
     button(SETUP_ID + ':testping', 'Health check', '🏓', ButtonStyle.Secondary),
-    button(SETUP_ID + ':guidedm', 'DM me the guide', '📬', ButtonStyle.Secondary),
     button(SETUP_ID + ':view:board', 'Live board', '📌', ButtonStyle.Primary),
-    button(SETUP_ID + ':view:status', 'Status line', '🟢', ButtonStyle.Primary),
   );
 
-  return { embeds: [panelEmbed({ guild, config, snapshots })], components: [top, bottom, tests] };
+  // Its own row: five buttons whose labels add up to 61 characters is wider than Discord allows,
+  // and "The specified component exceeds the maximum width" is not a message anybody can act on.
+  const views = new ActionRowBuilder().addComponents(
+    button(SETUP_ID + ':view:status', 'Status line', '🟢', ButtonStyle.Primary),
+    button(SETUP_ID + ':guidedm', 'DM me the guide', '📬', ButtonStyle.Secondary),
+  );
+
+  return { embeds: [panelEmbed({ guild, config, snapshots })], components: [top, bottom, tests, views] };
 }
 
 export function rolesView(config) {
@@ -104,31 +109,62 @@ export function rolePickView(config, tierId) {
 }
 
 export function logsView(config) {
-  // Two pickers per row: Discord allows five rows, and this view also needs a button row, so one
-  // row per channel would have overflowed the moment a fifth channel was added.
-  const picker = (kind) =>
-    new ChannelSelectMenuBuilder()
-      .setCustomId(SETUP_ID + ':logset:' + kind.id)
-      .setPlaceholder(kind.emoji + ' ' + kind.label + ' channel')
-      .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-      .setMinValues(0)
-      .setMaxValues(1);
+  // One picker per row is all Discord allows (a select menu takes the whole row), and five rows is
+  // the whole message, so the kinds are chosen first and the channel picked on the next screen -
+  // exactly like the roles flow. Two selects side by side is rejected outright.
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(SETUP_ID + ':logpick')
+    .setPlaceholder('Pick a log channel to set')
+    .addOptions(
+      LOG_KINDS.map((kind) => ({
+        label: kind.label,
+        value: kind.id,
+        emoji: kind.emoji,
+        description: config?.logs?.[kind.id] ? 'Set — change or clear it' : 'Not set yet',
+      })),
+    );
 
-  const rows = [];
-  for (let index = 0; index < LOG_KINDS.length; index += 2) {
-    rows.push(new ActionRowBuilder().addComponents(...LOG_KINDS.slice(index, index + 2).map(picker)));
-  }
-
-  rows.push(
-    new ActionRowBuilder().addComponents(
-      button(SETUP_ID + ':testlogs', 'Send test', '🧪', ButtonStyle.Secondary),
-      button(SETUP_ID + ':createlogs', 'Make channels', '📁', ButtonStyle.Success),
-      button(SETUP_ID + ':logclear', 'Clear all', '🧹', ButtonStyle.Danger),
-      button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary),
-    ),
+  const row = new ActionRowBuilder().addComponents(
+    button(SETUP_ID + ':testlogs', 'Send test', '🧪', ButtonStyle.Secondary),
+    button(SETUP_ID + ':createlogs', 'Make channels', '📁', ButtonStyle.Success),
+    button(SETUP_ID + ':logclear', 'Clear all', '🧹', ButtonStyle.Danger),
+    button(SETUP_ID + ':main', 'Back', '⬅️', ButtonStyle.Secondary),
   );
 
-  return { embeds: [logsEmbed({ config })], components: rows.slice(0, 5) };
+  return { embeds: [logsEmbed({ config })], components: [new ActionRowBuilder().addComponents(select), row] };
+}
+
+/** One log channel: the picker, and a Clear for a channel that is already set. */
+export function logPickView(config, kindId) {
+  const kind = LOG_KINDS.find((entry) => entry.id === kindId);
+  if (!kind) return logsView(config);
+
+  const current = config?.logs?.[kind.id] ?? null;
+  const select = new ChannelSelectMenuBuilder()
+    .setCustomId(SETUP_ID + ':logset:' + kind.id)
+    .setPlaceholder(kind.emoji + ' Pick the ' + kind.label + ' channel')
+    .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+    .setMinValues(0)
+    .setMaxValues(1);
+
+  const row = new ActionRowBuilder().addComponents(
+    button(SETUP_ID + ':logclearone:' + kind.id, 'Clear', '🧹', ButtonStyle.Danger).setDisabled(!current),
+    button(SETUP_ID + ':view:logs', 'Back', '⬅️', ButtonStyle.Secondary),
+  );
+
+  return {
+    embeds: [
+      hintEmbed(
+        kind.emoji + ' ' + kind.label,
+        [
+          kind.description ?? 'Pick the channel this kind of message goes to.',
+          '',
+          'Currently: ' + (current ? '<#' + current + '>' : 'not set'),
+        ].join('\n'),
+      ),
+    ],
+    components: [new ActionRowBuilder().addComponents(select), row],
+  };
 }
 
 /**

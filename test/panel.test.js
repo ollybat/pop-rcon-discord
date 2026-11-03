@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import {
   boardView,
   guideView,
+  logPickView,
   logsView,
   mainPanel,
   resetView,
@@ -68,6 +69,7 @@ const views = {
   rolesView: (config) => rolesView(config),
   rolePickView: (config) => rolePickView(config, 'owner'),
   logsView: (config) => logsView(config),
+  logPickView: (config) => logPickView(config, 'chat'),
   serversView: (config) => serversView(config, { snapshots: [snapshot] }),
   slotView: (config) => slotView(config, 1, snapshot),
   boardView: (config) => boardView(config, { snapshots: [snapshot] }),
@@ -128,6 +130,64 @@ test('the status view shows the live line, the whole vocabulary and the PROBLEM 
 test('the main panel offers the status line', () => {
   const ids = customIds(mainPanel(full, { snapshots: [snapshot] }));
   assert.ok(ids.includes('sb:setup:view:status'), 'the Status line button is missing');
+});
+
+test('no row puts two select menus side by side, which Discord rejects outright', () => {
+  // A select menu takes the whole row. Two of them in one ActionRow is the
+  // COMPONENT_LAYOUT_WIDTH_EXCEEDED error users see as a broken panel.
+  for (const [name, build] of Object.entries(views)) {
+    for (const config of [full, blank]) {
+      for (const row of build(config).components ?? []) {
+        const items = row.toJSON ? row.toJSON().components : row.components ?? [];
+        const selects = items.filter((item) => item.type !== 2);
+        assert.ok(selects.length <= 1, name + ' has ' + selects.length + ' pickers in one row');
+      }
+    }
+  }
+});
+
+test('a row of buttons stays inside the width Discord allows', () => {
+  // These are the widths that are known to render: the helpers row is five buttons at 45 characters
+  // and the board row is five at 50, so a fifth button that would push a row past 50 (the status
+  // line button did, at 61) belongs on its own row instead.
+  const budget = (count) => (count >= 5 ? 50 : 55);
+
+  for (const [name, build] of Object.entries(views)) {
+    for (const row of build(full).components ?? []) {
+      const items = row.toJSON ? row.toJSON().components : row.components ?? [];
+      if (items.some((item) => item.type !== 2)) continue;
+      const width = items.reduce((sum, item) => sum + String(item.label ?? '').length, 0);
+      assert.ok(
+        width <= budget(items.length),
+        name + ': ' + items.length + ' buttons totalling ' + width + ' characters is too wide (limit ' + budget(items.length) + ')',
+      );
+    }
+  }
+});
+
+test('the log channels are chosen, then set: one picker per screen', () => {
+  const list = logsView(full);
+  const ids = customIds(list);
+  assert.ok(ids.includes('sb:setup:logpick'), 'the log view lists the kinds');
+
+  const options = list.components[0].toJSON().components[0].options;
+  assert.equal(options.length, 5, 'every log kind is offered');
+  assert.equal(options.find((option) => option.value === 'status').description, 'Set — change or clear it');
+  assert.equal(options.find((option) => option.value === 'chat').description, 'Not set yet');
+
+  const pick = logPickView(full, 'chat');
+  const pickIds = customIds(pick);
+  assert.ok(pickIds.includes('sb:setup:logset:chat'));
+  assert.ok(pickIds.includes('sb:setup:logclearone:chat'));
+  assert.match(pick.embeds[0].data.description, /not set/, 'the chat channel has none yet');
+
+  // A channel that is set can be cleared; one that is not, cannot.
+  const statusPick = logPickView(full, 'status');
+  assert.match(statusPick.embeds[0].data.description, /<#222222222222222222>/);
+  assert.equal(customIds(statusPick).includes('sb:setup:logclearone:status'), true);
+
+  // An unknown kind falls back to the list instead of an empty message.
+  assert.ok(customIds(logPickView(full, 'nope')).includes('sb:setup:logpick'));
 });
 
 test('the board view keeps one Back button and the digest controls', () => {
