@@ -800,16 +800,15 @@ async function main() {
   if (config.heartbeat.enabled) {
     const gap = describeGap(await heartbeat.read());
     const away = gap.known && gap.seconds >= config.heartbeat.gapSeconds;
-    for (const id of ids) {
-      await logs.status(id, {
-        title: away ? '🟢 Back online after ' + duration(gap.seconds) : '🟢 Bot started',
-        description:
-          (away
-            ? 'The bot started again <t:' + Math.floor(Date.now() / 1000) + ':R>, after about ' + duration(gap.seconds) + ' with nothing running.'
-            : 'Started <t:' + Math.floor(Date.now() / 1000) + ':R>.') +
-          '\n-# Live status, the board and the alerts are running again.',
-      });
-    }
+    const title = away ? '🟢 Back online after ' + duration(gap.seconds) : '🟢 Bot started';
+    const description =
+      (away
+        ? 'The bot started again <t:' + Math.floor(Date.now() / 1000) + ':R>, after about ' + duration(gap.seconds) + ' with nothing running.'
+        : 'Started <t:' + Math.floor(Date.now() / 1000) + ':R>.') +
+      '\n-# Live status, the board and the alerts are running again.';
+
+    for (const id of ids) await logs.status(id, { title, description });
+    logger.info('[notice] ' + title + (gap.known ? ' (last beat was ' + duration(gap.seconds) + ' ago)' : ' (no previous beat)'));
   }
 
   await heartbeat.start();
@@ -849,6 +848,7 @@ async function shutdown(signal) {
           '\n-# A \u201cBack online\u201d line follows when it starts again.',
       });
     }
+    logger.info('[notice] 🔴 Bot stopping (' + signal + ')');
     await Promise.race([logs.tail, new Promise((resolve) => setTimeout(resolve, 2000))]).catch(() => {});
   }
 
