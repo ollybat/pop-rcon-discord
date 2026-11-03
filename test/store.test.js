@@ -268,3 +268,21 @@ test('milestones and outages can be switched off separately', () => {
   const master = normalizeGuildConfig({ alerts: { enabled: false, milestones: true } }, 'g');
   assert.equal(master.alerts.enabled, false, 'the master switch survives');
 });
+
+test('the digest is off until it has a channel, and its hour is optional', () => {
+  const empty = emptyGuildConfig('g');
+  assert.deepEqual(empty.digest, { enabled: false, channelId: null, hour: null, lastSent: null });
+
+  const on = normalizeGuildConfig({ digest: { enabled: true, channelId: '123456789012345678', hour: 21, lastSent: '2026-11-02' } }, 'g');
+  assert.equal(on.digest.enabled, true);
+  assert.equal(on.digest.hour, 21);
+  assert.equal(on.digest.lastSent, '2026-11-02');
+
+  const noChannel = normalizeGuildConfig({ digest: { enabled: true, hour: 21 } }, 'g');
+  assert.equal(noChannel.digest.enabled, false, 'nowhere to post means nothing to do');
+
+  const junk = normalizeGuildConfig({ digest: { enabled: true, channelId: '123456789012345678', hour: 99, lastSent: 'someday' } }, 'g');
+  assert.equal(junk.digest.enabled, true);
+  assert.equal(junk.digest.hour, null, 'an hour that is not an hour falls back to the default');
+  assert.equal(junk.digest.lastSent, null);
+});

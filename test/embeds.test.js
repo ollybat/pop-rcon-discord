@@ -5,6 +5,7 @@ import { emptyGuildConfig, recordPeak } from '../src/store.js';
 import {
   baseEmbed,
   commandLogEmbed,
+  digestEmbed,
   errorEmbed,
   errorLogEmbed,
   guideEmbed,
@@ -481,4 +482,71 @@ test('pingEmbed leads with the worst server in the fleet', () => {
   assert.match(rcon, /🟠/);
   assert.match(rcon, /5 fps/);
   assert.match(rcon, /📴/);
+});
+
+test('the digest embed says nothing rather than zero when there is nothing', () => {
+  const empty = digestEmbed({ digest: { anyRecorded: false, servers: [] } });
+  assert.match(empty.data.title, /Nothing to report yet/);
+  assert.match(empty.data.description, /not seen a full day yet/);
+
+  const bare = digestEmbed({});
+  assert.match(bare.data.title, /Nothing to report yet/);
+});
+
+test('the digest embed reports the reading, the week and the best day', () => {
+  const digest = {
+    today: '2026-11-03',
+    yesterday: '2026-11-02',
+    anyRecorded: true,
+    hasYesterday: true,
+    combined: null,
+    servers: [
+      {
+        slot: 1,
+        name: 'spinback 5x',
+        yesterday: 27,
+        dayBefore: 22,
+        change: 5,
+        week: { average: 20, days: 7 },
+        previousWeek: { average: 9, days: 1 },
+        trend: 11,
+        allTime: { peak: 31, day: '2026-10-31', at: '2026-10-31T18:00:00.000Z' },
+        recordedDays: 8,
+      },
+    ],
+  };
+
+  const embed = digestEmbed({ digest, config: emptyGuildConfig('g') });
+  assert.match(embed.data.title, /Yesterday on spinback 5x/);
+  const field = fieldNamed(embed, '1. spinback 5x');
+  assert.match(field.value, /\*\*27\*\* players at the busiest moment/);
+  assert.match(field.value, /▲ \+5 on the day before/);
+  assert.match(field.value, /Averaging \*\*20\*\* over 7 recorded day\(s\)/);
+  assert.match(field.value, /▲ \+11 on the week before/);
+  assert.match(field.value, /Best day so far: \*\*31\*\*/);
+  assert.match(fieldNamed(embed, 'How this is counted').value, /never as a zero/);
+  assert.equal(embed.data.footer.text, 'Powered by Spinback');
+  assert.ok(!JSON.stringify(embed.data).includes('secret'));
+});
+
+test('the digest embed admits a missing day and a thin history', () => {
+  const digest = {
+    yesterday: '2026-11-02',
+    anyRecorded: true,
+    hasYesterday: false,
+    combined: null,
+    servers: [
+      { slot: 1, name: 'one', yesterday: null, dayBefore: null, change: null, week: { average: null, days: 0 }, previousWeek: { average: null, days: 0 }, trend: null, allTime: null, recordedDays: 1 },
+      { slot: 2, name: 'two', yesterday: 12, dayBefore: 12, change: 0, week: { average: 12, days: 2 }, previousWeek: { average: null, days: 0 }, trend: null, allTime: null, recordedDays: 2 },
+    ],
+    combined: 12,
+  };
+
+  const embed = digestEmbed({ digest, config: emptyGuildConfig('g') });
+  assert.match(embed.data.title, /every server/);
+  assert.match(fieldNamed(embed, '1. one').value, /No reading/);
+  assert.match(fieldNamed(embed, '1. one').value, /Not enough days recorded for an average yet \(1 so far\)/);
+  assert.match(fieldNamed(embed, '2. two').value, /the same as the day before/);
+  assert.match(fieldNamed(embed, '2. two').value, /Averaging \*\*12\*\*/);
+  assert.match(fieldNamed(embed, 'Every server together').value, /12 players across/);
 });
