@@ -223,6 +223,7 @@ export function createDmRelay({
 
     const guilds = await sharedGuilds(client, message.author.id).catch(() => []);
     const help = looksLikeHelpRequest(text);
+    const owner = await isOwner(message.author).catch(() => false);
     const mayForward = (guilds.length > 0 || forwardStrangers) && allowForward(message.author.id, at);
     const wantReply = shouldAutoReply(message.author.id, at);
 
@@ -259,7 +260,7 @@ export function createDmRelay({
       if (wantReply) counters?.inc?.('dmAnswered');
       if (wantReply) {
         await message.channel
-          .send({ embeds: [dmAutoReplyEmbed({ user: message.author, guilds, prefix, forwarded: delivered > 0, help })] })
+          .send({ embeds: [dmAutoReplyEmbed({ user: message.author, guilds, prefix, forwarded: delivered > 0, help, owner })] })
           .catch(() => {});
       }
 
@@ -271,7 +272,7 @@ export function createDmRelay({
     if (wantReply) {
       markReplied(message.author.id, at);
       await message.channel
-        .send({ embeds: [dmAutoReplyEmbed({ user: message.author, guilds, prefix, forwarded: false, help })] })
+        .send({ embeds: [dmAutoReplyEmbed({ user: message.author, guilds, prefix, forwarded: false, help, owner })] })
         .catch(() => {});
     }
 

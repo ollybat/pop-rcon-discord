@@ -607,17 +607,19 @@ export function guideEmbed({ config }) {
 }
 
 /** The automatic answer to anybody who DMs the bot. */
-export function dmAutoReplyEmbed({ user = null, guilds = [], prefix = '!', forwarded = false, help = false } = {}) {
+export function dmAutoReplyEmbed({ user = null, guilds = [], prefix = '!', forwarded = false, help = false, owner = false } = {}) {
   const who = user?.username ? '**' + user.username + '**' : 'there';
 
   const lines = [
     'Hi ' + who + ' - this is **' + BRAND.name + ' pop bot**. I watch the ' + BRAND.clan +
       ' Rust servers over WebRCON and report the live population, but I am a bot: I cannot answer questions myself.',
     '',
-    forwarded
-      ? '🙋 **Your message is on its way to the clan owners.** If it needs an answer, one of them will reply to you here.'
-      : '🔒 I pass messages on for members of the servers I am in. If you play on the ' + BRAND.name +
-        ' Rust servers, send it again from the Discord server so the owners can see who you are.',
+    owner
+      ? '🧑‍✈️ **You are one of my owners**, so there is nobody for me to pass this to — I noted it in the staff channel, when one is set up. `/setup` configures me, `/ping` checks me, and this DM is the place to talk to me.'
+      : forwarded
+        ? '🙋 **Your message is on its way to the clan owners.** If it needs an answer, one of them will reply to you here.'
+        : '🔒 I pass messages on for members of the servers I am in. If you play on the ' + BRAND.name +
+          ' Rust servers, send it again from the Discord server so the owners can see who you are.',
     '',
     '**Out in the Discord server**',
     '• \`' + prefix + 'pop\` - who is on the Rust servers right now',

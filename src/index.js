@@ -13,6 +13,7 @@ import { handlePingComponent } from './ping.js';
 import { history, slotKey } from './history.js';
 import { stats } from './stats.js';
 import { handleSetupComponent, handleSetupModal } from './setup/index.js';
+import { welcomeOwner } from './onboarding.js';
 import { parsePrefixCommand } from './prefix.js';
 import { createDmRelay } from './dms.js';
 import { createHealthServer } from './web.js';
@@ -473,7 +474,26 @@ client.on('messageCreate', async (message) => {
   }
 });
 
+/** Guilds whose owner already got the setup guide in this run. */
+const welcomed = new Set();
+
 client.on('guildCreate', async (guild) => {
+  // First thing: the owner gets the guide in their DMs, because that is the whole point of being
+  // invited. A closed DM is answered in the server instead, never silently dropped.
+  const onboarding = await welcomeOwner({
+    client,
+    guild,
+    logger,
+    seen: welcomed,
+    prefix: config.discord.prefix,
+    prefixEnabled: config.discord.prefixCommandsEnabled,
+    dmEnabled: config.dm.enabled,
+  }).catch((error) => ({ delivered: false, reason: error && error.message ? error.message : String(error) }));
+
+  logger.info(
+    '[onboarding] ' + guild.name + ': ' + (onboarding.delivered ? 'guide sent to the owner' : 'no DM sent (' + onboarding.reason + ')'),
+  );
+
   try {
     await store.load(guild.id);
     await servers.syncGuild(guild.id);
