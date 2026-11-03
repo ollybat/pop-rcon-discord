@@ -4,6 +4,16 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.1] — the board view that Discord refused
+
+### Fixed
+- The 📌 Live board view sent **two Back buttons with the same custom id**, which Discord rejects with
+  `Invalid Form Body … component custom id cannot be duplicated` — so every button in that view failed
+  with an error in the log and no visible answer. One Back is enough; the digest row now keeps only
+  its own three controls.
+- A regression test now walks **every** view (and the server modal), flattening each payload and
+  asserting that no custom id repeats, that no message has more than five rows, and that no row has
+  more than five components. Discord validates those rules, so the bot does too, before sending.
 ## [0.12.0] — the day's story, once a day
 
 Still read-only, still no player history, still no address outside /setup. What is new is that the
