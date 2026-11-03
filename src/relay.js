@@ -13,39 +13,51 @@ export function formatChatMessage({ message, raw }) {
  * channel after a failure instead of caching a broken one.
  */
 export class ChannelRelay {
-  constructor({ client, channelId = null, logger = console }) {
+  constructor({ client, channelId = null, channelIdFor = null, logger = console }) {
     this.client = client;
+    // The channel can come from the env (one channel, every guild) or from /setup, per guild.
     this.channelId = channelId;
+    this.channelIdFor = typeof channelIdFor === 'function' ? channelIdFor : null;
     this.logger = logger;
-    this.channel = null;
+    this.channels = new Map();
+  }
+
+  /** What /setup saved for this guild, else the env channel, else nothing. */
+  channelFor(guildId) {
+    const configured = this.channelIdFor ? this.channelIdFor(guildId) : null;
+    return configured ?? this.channelId ?? null;
   }
 
   get enabled() {
-    return Boolean(this.channelId);
+    return Boolean(this.channelId || this.channelIdFor);
   }
 
-  async send(content) {
-    if (!this.enabled) return false;
+  async send(content, guildId = null) {
+    const channelId = this.channelFor(guildId);
+    if (!channelId) return false;
 
     try {
-      if (!this.channel) this.channel = await this.client.channels.fetch(this.channelId);
-
-      if (!this.channel || !this.channel.isTextBased()) {
-        this.logger.warn('[relay] channel ' + this.channelId + ' is not a text channel');
-        this.channel = null;
-        return false;
+      let channel = this.channels.get(channelId);
+      if (!channel) {
+        channel = await this.client.channels.fetch(channelId);
+        if (!channel || !channel.isTextBased()) {
+          this.logger.warn('[relay] channel ' + channelId + ' is not a text channel');
+          return false;
+        }
+        this.channels.set(channelId, channel);
       }
 
-      await this.channel.send(content);
+      await channel.send(content);
       return true;
     } catch (error) {
-      this.channel = null;
-      this.logger.warn('[relay] could not post to ' + this.channelId + ': ' + error.message);
+      // Never cache a channel that failed: it may have been deleted or re-created.
+      this.channels.delete(channelId);
+      this.logger.warn('[relay] could not post to ' + channelId + ': ' + error.message);
       return false;
     }
   }
 
-  async chat(event) {
-    return this.send(formatChatMessage(event));
+  async chat(event, guildId = null) {
+    return this.send(formatChatMessage(event), guildId);
   }
 }

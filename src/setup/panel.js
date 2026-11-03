@@ -102,16 +102,20 @@ export function rolePickView(config, tierId) {
 }
 
 export function logsView(config) {
-  const rows = LOG_KINDS.map((kind) =>
-    new ActionRowBuilder().addComponents(
-      new ChannelSelectMenuBuilder()
-        .setCustomId(SETUP_ID + ':logset:' + kind.id)
-        .setPlaceholder(kind.emoji + ' ' + kind.label + ' channel')
-        .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-        .setMinValues(0)
-        .setMaxValues(1),
-    ),
-  );
+  // Two pickers per row: Discord allows five rows, and this view also needs a button row, so one
+  // row per channel would have overflowed the moment a fifth channel was added.
+  const picker = (kind) =>
+    new ChannelSelectMenuBuilder()
+      .setCustomId(SETUP_ID + ':logset:' + kind.id)
+      .setPlaceholder(kind.emoji + ' ' + kind.label + ' channel')
+      .setChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+      .setMinValues(0)
+      .setMaxValues(1);
+
+  const rows = [];
+  for (let index = 0; index < LOG_KINDS.length; index += 2) {
+    rows.push(new ActionRowBuilder().addComponents(...LOG_KINDS.slice(index, index + 2).map(picker)));
+  }
 
   rows.push(
     new ActionRowBuilder().addComponents(

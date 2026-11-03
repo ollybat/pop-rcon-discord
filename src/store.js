@@ -13,7 +13,7 @@ export function emptyGuildConfig(guildId) {
     version: CONFIG_VERSION,
     guildId,
     roles: { owner: null, coOwner: null, headAdmin: null, admin: null, moderator: null },
-    logs: { joinLeave: null, commands: null, errors: null, status: null },
+    logs: { joinLeave: null, commands: null, errors: null, status: null, chat: null },
     servers: [null, null, null],
     // The optional live population board: one channel, one message the bot keeps up to date.
     board: { channelId: null, messageId: null, enabled: false },

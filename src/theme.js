@@ -5,7 +5,7 @@ export const BRAND = {
   serverDefault: 'Spinback 5X EU',
   clan: 'Spinback clan',
   footer: 'Powered by Spinback',
-  version: '0.13.1',
+  version: '0.13.2',
 };
 
 /** Light blue is the brand colour; the rest stay semantic so status is still readable. */
@@ -143,6 +143,12 @@ export const LOG_KINDS = [
     label: 'Server Status',
     emoji: '📡',
     description: 'Connects, disconnects and restarts, plus setup changes.',
+  },
+  {
+    id: 'chat',
+    label: 'In-game Chat',
+    emoji: '💬',
+    description: 'Rust in-game chat mirrored into one channel. One-way on purpose: the bot never talks back to the server.',
   },
 ];
 
