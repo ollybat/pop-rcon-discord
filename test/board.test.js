@@ -5,6 +5,11 @@ import { normalizeGuildConfig } from '../src/store.js';
 
 const silentLogger = { info() {}, warn() {}, debug() {}, error() {} };
 
+/** Discord ids are snowflakes, and the store refuses anything that is not one. */
+const CHANNEL = '111111111111111111';
+const MESSAGE = '222222222222222222';
+const GONE = '333333333333333333';
+
 function snapshot(slot, players = 5, connected = true) {
   return {
     slot,
@@ -36,11 +41,11 @@ function makeStore(guildId, { board = {}, alerts = { enabled: true } } = {}) {
 }
 
 /** A client with one channel whose messages can be fetched, edited, deleted or missing. */
-function makeClient({ channelId = 'chan', missing = false, sendFails = false, editFails = false } = {}) {
+function makeClient({ channelId = CHANNEL, missing = false, sendFails = false, editFails = false } = {}) {
   const sent = [];
   const edits = [];
   const message = {
-    id: 'msg-1',
+    id: MESSAGE,
     edit: async (payload) => {
       if (editFails) throw new Error('no permission');
       edits.push(payload);
@@ -95,7 +100,7 @@ test('boardNote says what it is and when it stops', () => {
 });
 
 test('a disabled board does nothing at all', async () => {
-  const store = makeStore('g', { board: { channelId: 'chan', enabled: false } });
+  const store = makeStore('g', { board: { channelId: CHANNEL, enabled: false } });
   const { client } = makeClient();
   const manager = createBoardManager({ client, store, servers: makeServers([snapshot(1)]), logger: silentLogger });
 
@@ -105,7 +110,7 @@ test('a disabled board does nothing at all', async () => {
 });
 
 test('the first pass posts the board and remembers the message id', async () => {
-  const store = makeStore('g', { board: { channelId: 'chan', enabled: true } });
+  const store = makeStore('g', { board: { channelId: CHANNEL, enabled: true } });
   const { client, sent } = makeClient();
   const manager = createBoardManager({ client, store, servers: makeServers([snapshot(1, 7)]), logger: silentLogger });
 
@@ -114,11 +119,11 @@ test('the first pass posts the board and remembers the message id', async () => 
   assert.equal(result.reason, 'posted');
   assert.equal(sent.length, 1, 'one board message');
   assert.match(sent[0].embeds[0].data.description, /📌 board/);
-  assert.equal(store.get().board.messageId, 'msg-1', 'the message id is persisted for the next restart');
+  assert.equal(store.get().board.messageId, MESSAGE, 'the message id is persisted for the next restart');
 });
 
 test('a second pass edits the same message, and skips the edit when nothing changed', async () => {
-  const store = makeStore('g', { board: { channelId: 'chan', enabled: true } });
+  const store = makeStore('g', { board: { channelId: CHANNEL, enabled: true } });
   const { client, edits } = makeClient();
   let snapshots = [snapshot(1, 7)];
   const manager = createBoardManager({ client, store, servers: { snapshots: () => snapshots }, logger: silentLogger });
@@ -136,7 +141,7 @@ test('a second pass edits the same message, and skips the edit when nothing chan
 });
 
 test('an old reading is refreshed even when nothing changed', async () => {
-  const store = makeStore('g', { board: { channelId: 'chan', enabled: true } });
+  const store = makeStore('g', { board: { channelId: CHANNEL, enabled: true } });
   const { client, edits } = makeClient();
   let clock = 1000;
   const manager = createBoardManager({ client, store, servers: makeServers([snapshot(1, 7)]), logger: silentLogger, forceSeconds: 60, now: () => clock });
@@ -149,7 +154,7 @@ test('an old reading is refreshed even when nothing changed', async () => {
 });
 
 test('a deleted board message is re-posted instead of going quiet', async () => {
-  const store = makeStore('g', { board: { channelId: 'chan', enabled: true, messageId: 'msg-gone' } });
+  const store = makeStore('g', { board: { channelId: CHANNEL, enabled: true, messageId: GONE } });
   const { client, sent } = makeClient({ missing: true });
   const manager = createBoardManager({ client, store, servers: makeServers([snapshot(1, 4)]), logger: silentLogger });
 
@@ -159,7 +164,7 @@ test('a deleted board message is re-posted instead of going quiet', async () => 
 });
 
 test('a channel the bot cannot write to is reported once, not on every pass', async () => {
-  const store = makeStore('g', { board: { channelId: 'chan', enabled: true, messageId: 'msg-1' } });
+  const store = makeStore('g', { board: { channelId: CHANNEL, enabled: true, messageId: MESSAGE } });
   const warnings = [];
   const { client } = makeClient({ editFails: true });
   const manager = createBoardManager({
@@ -180,7 +185,7 @@ test('a channel the bot cannot write to is reported once, not on every pass', as
 });
 
 test('a board in a channel that vanished gives up quietly', async () => {
-  const store = makeStore('g', { board: { channelId: 'chan', enabled: true } });
+  const store = makeStore('g', { board: { channelId: CHANNEL, enabled: true } });
   const client = { channels: { fetch: async () => null, cache: new Map() } };
   const manager = createBoardManager({ client, store, servers: makeServers([snapshot(1, 4)]), logger: silentLogger });
 
@@ -203,15 +208,15 @@ test('a live /pop message refreshes itself and then stops', async () => {
     now: () => clock,
   });
 
-  const until = await manager.startLive({ guildId: 'g', channelId: 'chan', messageId: 'msg-live' });
+  const until = await manager.startLive({ guildId: 'g', channelId: CHANNEL, messageId: 'msg-live' });
   assert.equal(until, 60000, 'one minute of updates');
   assert.equal(edits.length, 1, 'starting it refreshes the message at once');
   assert.match(edits[0].embeds[0].data.description, /🔴 live/);
-  assert.ok(manager.liveEntry({ channelId: 'chan', messageId: 'msg-live' }));
+  assert.ok(manager.liveEntry({ channelId: CHANNEL, messageId: 'msg-live' }));
 
   clock = 61 * 1000;
   await manager.tick();
-  assert.equal(manager.liveEntry({ channelId: 'chan', messageId: 'msg-live' }), null, 'it expires on its own');
+  assert.equal(manager.liveEntry({ channelId: CHANNEL, messageId: 'msg-live' }), null, 'it expires on its own');
   assert.equal(edits.length, 2, 'and says so on the message');
 });
 
@@ -220,10 +225,10 @@ test('pressing the live button again stops the updates', async () => {
   const { client } = makeClient();
   const manager = createBoardManager({ client, store, servers: makeServers([snapshot(1, 3)]), logger: silentLogger });
 
-  await manager.startLive({ guildId: 'g', channelId: 'chan', messageId: 'msg-live' });
-  assert.equal(manager.stopLive({ channelId: 'chan', messageId: 'msg-live' }), true);
-  assert.equal(manager.stopLive({ channelId: 'chan', messageId: 'msg-live' }), false);
-  assert.equal(manager.liveEntry({ channelId: 'chan', messageId: 'msg-live' }), null);
+  await manager.startLive({ guildId: 'g', channelId: CHANNEL, messageId: 'msg-live' });
+  assert.equal(manager.stopLive({ channelId: CHANNEL, messageId: 'msg-live' }), true);
+  assert.equal(manager.stopLive({ channelId: CHANNEL, messageId: 'msg-live' }), false);
+  assert.equal(manager.liveEntry({ channelId: CHANNEL, messageId: 'msg-live' }), null);
 });
 
 test('a live message that cannot be edited is not registered', async () => {
@@ -231,13 +236,13 @@ test('a live message that cannot be edited is not registered', async () => {
   const { client } = makeClient({ editFails: true });
   const manager = createBoardManager({ client, store, servers: makeServers([snapshot(1, 3)]), logger: silentLogger });
 
-  const until = await manager.startLive({ guildId: 'g', channelId: 'chan', messageId: 'msg-live' });
+  const until = await manager.startLive({ guildId: 'g', channelId: CHANNEL, messageId: 'msg-live' });
   assert.equal(until, null);
   assert.equal(manager.live.size, 0);
 });
 
 test('the ticker walks the board and the live messages, then stops cleanly', async () => {
-  const store = makeStore('g', { board: { channelId: 'chan', enabled: true } });
+  const store = makeStore('g', { board: { channelId: CHANNEL, enabled: true } });
   const { client, sent } = makeClient();
   const manager = createBoardManager({ client, store, servers: makeServers([snapshot(1, 9)]), logger: silentLogger, intervalSeconds: 30 });
 

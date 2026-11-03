@@ -237,9 +237,9 @@ test('the live board is only on when it has a channel', () => {
   assert.equal(off.board.enabled, true);
   assert.equal(off.board.messageId, null);
 
-  const noChannel = normalizeGuildConfig({ board: { enabled: true, messageId: '999' } }, 'g');
+  const noChannel = normalizeGuildConfig({ board: { enabled: true, messageId: '999999999999999999' } }, 'g');
   assert.equal(noChannel.board.enabled, false, 'a board with nowhere to post is off');
-  assert.equal(noChannel.board.messageId, '999');
+  assert.equal(noChannel.board.messageId, '999999999999999999');
 
   const junk = normalizeGuildConfig({ board: { channelId: 'not-a-channel', enabled: true } }, 'g');
   assert.equal(junk.board.channelId, null);
