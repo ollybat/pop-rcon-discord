@@ -106,6 +106,12 @@ export const config = {
     // Also send the guild owner a direct message when a server goes down and comes back.
     dmOwner: optionalBoolean('ALERT_DM_OWNER', true),
   },
+  digest: {
+    // The UTC hour the daily digest goes out, unless a guild picked its own in /setup.
+    hour: Math.min(23, Math.max(0, optionalNumber('DIGEST_HOUR', 20))),
+    // How many days the week-over-week comparison covers.
+    window: Math.max(3, optionalNumber('DIGEST_WINDOW_DAYS', 7)),
+  },
   dm: {
     // Answer direct messages and pass them to the clan owners.
     enabled: optionalBoolean('DM_ENABLED', true),

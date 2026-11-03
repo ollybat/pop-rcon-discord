@@ -20,6 +20,8 @@ export function emptyGuildConfig(guildId) {
     // What the bot is allowed to shout about: milestones (a new peak, a full server, a queue
     // forming), an outage that lasts, and the recovery afterwards.
     alerts: { enabled: true, milestones: true, outage: true },
+    // The daily digest: yesterday's numbers, once a day, in a channel of your choosing.
+    digest: { enabled: false, channelId: null, hour: null, lastSent: null },
 
     // slot -> { day, peak, peakAt }: the busiest moment of the current UTC day.
     stats: {},
@@ -84,6 +86,14 @@ export function normalizeGuildConfig(raw, guildId) {
     // A board without a channel is meaningless, so it is never "on" without one.
     enabled: raw.board?.enabled === true && Boolean(boardChannel),
   };
+  const digestHour = Math.floor(Number(raw.digest?.hour));
+  config.digest = {
+    enabled: raw.digest?.enabled === true && Boolean(cleanId(raw.digest?.channelId)),
+    channelId: cleanId(raw.digest?.channelId),
+    hour: Number.isInteger(digestHour) && digestHour >= 0 && digestHour <= 23 ? digestHour : null,
+    lastSent: /^\d{4}-\d{2}-\d{2}$/.test(String(raw.digest?.lastSent ?? '')) ? String(raw.digest.lastSent) : null,
+  };
+
   config.alerts = {
     enabled: raw.alerts?.enabled !== false,
     milestones: raw.alerts?.milestones !== false,

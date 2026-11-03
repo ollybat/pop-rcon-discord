@@ -521,6 +521,89 @@ export function outageEmbed({ down = true, name = 'Server', seconds = 0, error =
     .setDescription('It was unreachable for ' + outageText(seconds) + '.\n-# `/pop` shows who is on, `/ping` the reading.');
 }
 
+/**
+ * The daily digest. Every line is a stored reading or an honest admission that there is not one,
+ * and the wording never turns a missing day into a zero.
+ */
+export function digestEmbed({ digest = null, config = null, at = new Date() } = {}) {
+  const day = digest?.yesterday ?? null;
+  const embed = baseEmbed({ color: COLORS.brand });
+
+  if (!digest || !digest.anyRecorded) {
+    return embed
+      .setTitle('📊 Nothing to report yet')
+      .setDescription(
+        'The bot writes one line per server per day - the busiest moment it saw - and it has not seen a full day yet.' +
+          '\n-# This message keeps its place; once there is a day behind it, it will have numbers in it.',
+      );
+  }
+
+  const title = digest.servers.length === 1 ? '📊 Yesterday on ' + digest.servers[0].name : '📊 Yesterday on every server';
+  embed.setTitle(truncate(title, 250));
+
+  const dayLabel = day ? '<t:' + Math.floor(new Date(day + 'T12:00:00.000Z').getTime() / 1000) + ':D>' : 'yesterday';
+  const lines = [];
+  if (digest.servers.length === 1) lines.push('The busiest moment the bot saw on ' + dayLabel + '.');
+  else lines.push('The busiest moment of ' + dayLabel + ', per server.');
+  embed.setDescription(lines.join('\n'));
+
+  for (const server of digest.servers) {
+    const parts = [];
+
+    if (server.yesterday === null) {
+      parts.push('**No reading** — the bot was not watching this server that day.');
+    } else {
+      const change =
+        server.change === null
+          ? 'no reading the day before'
+          : server.change > 0
+            ? '▲ +' + server.change + ' on the day before'
+            : server.change < 0
+              ? '▼ ' + server.change + ' on the day before'
+              : 'the same as the day before';
+      parts.push('**' + server.yesterday + '** players at the busiest moment — ' + change + '.');
+    }
+
+    if (server.week.average !== null) {
+      const trend =
+        server.trend === null
+          ? ''
+          : server.trend > 0
+            ? ' · ▲ +' + server.trend + ' on the week before'
+            : server.trend < 0
+              ? ' · ▼ ' + server.trend + ' on the week before'
+              : ' · level with the week before';
+      parts.push('-# Averaging **' + server.week.average + '** over ' + server.week.days + ' recorded day(s)' + trend + '.');
+    } else {
+      parts.push('-# Not enough days recorded for an average yet (' + server.recordedDays + ' so far).');
+    }
+
+    if (server.allTime) {
+      parts.push(
+        '-# Best day so far: **' +
+          server.allTime.peak +
+          '** on <t:' +
+          Math.floor(new Date(server.allTime.day + 'T12:00:00.000Z').getTime() / 1000) +
+          ':D>' +
+          (server.allTime.at ? ' around <t:' + Math.floor(new Date(server.allTime.at).getTime() / 1000) + ':t>' : '') +
+          '.',
+      );
+    }
+
+    embed.addFields({ name: server.slot + '. ' + server.name, value: truncate(parts.join('\n'), 1024), inline: false });
+  }
+
+  if (digest.combined !== null) {
+    embed.addFields({ name: '🌍 Every server together', value: digest.combined + ' players across the servers that had a reading.', inline: false });
+  }
+
+  const notes = ['one line per server per day, from the readings the bot actually took'];
+  if (config) notes.push('a day it did not watch is reported as missing, never as a zero');
+  embed.addFields({ name: '🧾 How this is counted', value: notes.join(' · '), inline: false });
+
+  return embed;
+}
+
 export function pingEmbed({
   gatewayMs = null,
   uptimeSeconds = null,
