@@ -4,6 +4,27 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - the bot introduces itself when it is invited
+
+### Added
+
+- **The guild owner gets a setup guide in their DMs the moment the bot is invited** (`src/onboarding.js`).
+  Three branded embeds, private, and never posted anywhere: what the bot does and what it gives you;
+  the three steps that make it useful (**Servers → Test**, **Roles**, **Logs → Test channels**) with the
+  exact Rust start line (`+rcon.web 1 +rcon.ip 0.0.0.0 +rcon.port 28016 +rcon.password "..."`); and the
+  five failures that actually happen — timeout or refused (RCON off or port blocked, and it was maybe
+  the game port), mismatched password, no Message Content Intent, a missing `applications.commands`
+  scope, and how to reach a person with `!reply`.
+- **A closed DM is not a dead end**: if the owner does not accept DMs, the bot says so once, in the
+  server's system channel, and points at `/setup` and its Guide button.
+- **📬 DM me the guide** in the setup panel, so the guide can be re-sent at any time (owner only).
+- The direct-message answer now knows when it is talking to an owner and says so, instead of promising
+  to forward the message to the person who sent it.
+
+### Changed
+
+- The guide is sent once per guild per run, and never twice.
+
 ## [0.8.0] - every answer is a proper report
 
 ### Added
