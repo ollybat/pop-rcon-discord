@@ -4,6 +4,25 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.1] — one error, not nineteen
+
+### Fixed
+- **The error channel repeated itself.** A server that went away for four minutes posted the same
+  `🚨 Error — RCON <server>` embed once per poll — nineteen identical messages. Now the first one is
+  posted in full, every repeat inside a 15-minute window updates **that same message** with a running
+  tally (`🔁 ×19 · first … · last …`), and once it stops the message adds `✅ Quiet again since …`.
+  A different fault, or the same one after the window, still gets its own message.
+- **The console repeated itself too.** A failing poll logged both a WARN and an ERROR line every
+  20 seconds. One line per fault episode now, with the count on the recovery line
+  (`poll recovered after 19 failure(s) in 244s`). The error channel still receives every occurrence -
+  it counts them, that is what the tally is for.
+- **A board message deleted a moment before an edit** no longer logs
+  `DiscordAPIError[10008]: Unknown Message` as an error. The board treats a vanished message as its
+  cue to post a fresh one, which is what it was already doing 25 seconds later.
+
+### Added
+- `ERROR_REPEAT_WINDOW_MINUTES` (default 15) and `ERROR_QUIET_SECONDS` (default 60) if you want the
+  counting window or the all-clear to behave differently.
 ## [0.13.0] — a smaller !pop
 
 ### Changed

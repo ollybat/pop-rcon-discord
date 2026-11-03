@@ -28,7 +28,8 @@ server owner a **/setup** wizard plus one headline command for everybody: **!pop
 - **An MCP server** - `mcp/server.js` lets Claude Desktop / Claude Code / Codex read the same
   Rust servers directly, no Discord in the middle. See [docs/MCP.md](docs/MCP.md).
 - **Logs** - join & leave (with session length), every command, errors, and server
-  connects/disconnects.
+  connects/disconnects. A fault that keeps happening stays **one** message with a running count on it,
+  and says `✅ Quiet again` when it stops, so one outage cannot bury the channel.
 - **Light blue everywhere** - every embed uses the Spinback palette and footer, and the bot wears
   the name Spinback in your server.
 
