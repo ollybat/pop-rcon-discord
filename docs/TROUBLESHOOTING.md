@@ -30,13 +30,20 @@ The websocket to `ws://host:port/<password>` was refused or timed out.
 - The socket is connected but the reply was not JSON - `npm run doctor` prints what came back.
 - No server is configured yet: run `/setup` and add one.
 
-## The status is stuck on 🟡 RESTING
+## The status is stuck on ⏳ RESTING
 
 The server reports `Restarting: true` in `serverinfo`, which is what a Rust server sends while it
 shuts down and restarts. Once it answers normally the state returns to green.
 
-`PRESENCE_RESTING_ON_RECONNECT=true` also shows yellow while the bot is reconnecting after a drop.
-With the default `false` that window shows 🔴 instead.
+`PRESENCE_RESTING_ON_RECONNECT=true` also shows ⏳ while the bot is reconnecting after a drop.
+With the default `false` that window shows 🛑 instead.
+
+## The status says ⚠️ PROBLEM
+
+That state means the server is reachable but not healthy: RCON answers while `serverinfo` stays
+silent, the map is running under 20 FPS, or an RCON round-trip takes longer than 1.5 s. The three
+are listed in **/setup → 🟢 Status line**, and the same view has the switch that removes the ⚠️
+state entirely if you would rather only ever see 🟢, 🛑 and ⏳.
 
 ## The status never changes, or is missing
 
@@ -44,6 +51,8 @@ With the default `false` that window shows 🔴 instead.
 - Discord caches presence: the activity updates on their side within a few seconds.
 - A template longer than 128 characters is cut; that is Discord's activity-name limit.
 - Activity names are single line, so a template with a newline looks flattened.
+- The line never rotates: it shows the state of the server and nothing else. `/setup` →
+  🟢 **Status line** shows the line the bot is wearing right now, so you can check without waiting.
 
 ## `/setup` says only the server owner can use it
 

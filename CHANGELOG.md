@@ -4,6 +4,40 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] — a bio that says one thing, and a ⚠️ PROBLEM state
+
+### Changed
+- **The bot's status line is now four fixed lines, and it never rotates.** The bio is the whole
+  message, so a glance at the member list is never ambiguous:
+
+  ```
+  🟢 RCON ┆👥 63/200┆⏳Q: 0
+  🛑 RCON ┆ OFFLINE
+  ⏳ RCON ┆ RESTING
+  ⚠️ RCON ┆ PROBLEM
+  ```
+
+  The offline dot moved from 🔴 to 🛑 and resting from 🟡 to ⏳ to match, the queue is one number
+  (`⏳Q:`, no more `queued/joining` pair), and the rotation through queue/uptime and peak frames is
+  gone - `PRESENCE_ROTATE` with it. Placeholders are unchanged, so a host that overrode a template
+  keeps working.
+
+### Added
+- **⚠️ PROBLEM: a server that answers but is not healthy.** RCON connected while `serverinfo` stays
+  silent, a map under 20 FPS, or an RCON round-trip slower than 1.5 s now reads as one glanceable
+  line instead of a green lie. The thresholds are the ones `/ping` and `/lookup` already use, so the
+  bio and the dashboard can never disagree.
+- **/setup → 🟢 Status line**, a new view that shows the line the bot is wearing right now (drawn by
+  the same code the presence uses), the whole four-line vocabulary, and the switch for the PROBLEM
+  state - flipped per Discord server, applied within seconds, no restart. `PRESENCE_PROBLEM=false`
+  is the fallback for a server that never opens the view.
+
+### Fixed
+- The shared status table - the status-log embeds, `!pop`, `/lookup` and `/setup` - moved to the
+  same emoji as the bio (⏳ resting, 🛑 offline), so a channel and the member list never tell
+  different stories. The `/ping` verdict table keeps its own finer set (🟠 working hard, 🤔 silent,
+  📴 not answering).
+
 ## [0.14.0] — one bot, one server, and /lookup
 
 ### Added

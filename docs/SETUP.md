@@ -125,7 +125,8 @@ follows the configured roles.
 
 ## 5. Check it worked
 
-- The bot's name in the member list should show 🟢 RCON┆👥 ... within one poll interval.
+- The bot's name in the member list should show `🟢 RCON ┆👥 0/100┆⏳Q: 0` within one poll interval -
+  that line is the bot's whole bio, and **/setup → 🟢 Status line** shows which of the four it is wearing.
 - `!pop` should list the players who are online.
 - Joining the Rust server should produce a 🚪 embed in your join/leave channel within ~20 seconds.
 
