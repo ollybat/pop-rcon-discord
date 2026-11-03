@@ -49,6 +49,7 @@ export function mainPanel(config, { snapshots = [], guild = null } = {}) {
   const tests = new ActionRowBuilder().addComponents(
     button(SETUP_ID + ':testlogs', 'Test channels', '🧪', ButtonStyle.Secondary),
     button(SETUP_ID + ':testping', 'Health check', '🏓', ButtonStyle.Secondary),
+    button(SETUP_ID + ':guidedm', 'DM me the guide', '📬', ButtonStyle.Secondary),
   );
 
   return { embeds: [panelEmbed({ guild, config, snapshots })], components: [top, bottom, tests] };

@@ -173,6 +173,18 @@ test('!reply refuses strangers, unknown users and missing arguments', async () =
   assert.equal(member.received.length, 0);
 });
 
+test('an owner who DMs the bot is not told the message was forwarded to them', async () => {
+  const client = fakeClient({ guilds: [fakeGuild({ ownerId: 'owner1', members: ['owner1'] })] });
+  const relay = createDmRelay({ client, logger: quiet, options: {} });
+
+  const message = fakeDm({ id: 'owner1', username: 'olly', content: 'is everything alright?' });
+  assert.equal(await relay.handle(message), true);
+
+  const text = message.sent[0].embeds[0].data.description;
+  assert.match(text, /one of my owners/);
+  assert.ok(!text.includes('on its way to the clan owners'), 'no promise of a forward to themselves');
+});
+
 test('the relay ignores bots, server messages and a disabled switch', async () => {
   const client = fakeClient({ guilds: [fakeGuild({ members: ['u1'] })] });
   const relay = createDmRelay({ client, logger: quiet, options: {} });
