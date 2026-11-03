@@ -80,33 +80,6 @@ export const commands = [
     },
   },
   {
-    name: 'ping',
-    description: 'Health check: Discord ping, RCON ping and the public URL (Owner and Co-Owner, private)',
-    prefixUsage: '!ping',
-    minTier: 'coOwner',
-    private: true,
-    data: new SlashCommandBuilder().setName('ping').setDescription('Health check: Discord ping, RCON ping and the public URL'),
-    async run(ctx) {
-      await ctx.invoker.defer();
-
-      await ctx.invoker.edit(
-        await buildPingPayload({
-          guild: ctx.guild,
-          guildConfig: ctx.guildConfig,
-          servers: ctx.servers,
-          web: ctx.web ?? {},
-          client: ctx.client ?? null,
-          pollSeconds: ctx.pollSeconds ?? null,
-          prefix: ctx.prefix ?? '!',
-          prefixEnabled: ctx.prefixEnabled !== false,
-          dms: ctx.dms ?? null,
-          stats: ctx.stats ?? null,
-        }),
-      );
-    },
-  },
-
-  {
     name: 'lookup',
     description: 'Everything the bot knows: server dossier, trend, record book and who is on',
     prefixUsage: '!lookup [player]',
@@ -147,7 +120,32 @@ export const commands = [
       );
     },
   },
+  {
+    name: 'ping',
+    description: 'Health check: Discord ping, RCON ping and the public URL (Owner and Co-Owner, private)',
+    prefixUsage: '!ping',
+    minTier: 'coOwner',
+    private: true,
+    data: new SlashCommandBuilder().setName('ping').setDescription('Health check: Discord ping, RCON ping and the public URL'),
+    async run(ctx) {
+      await ctx.invoker.defer();
 
+      await ctx.invoker.edit(
+        await buildPingPayload({
+          guild: ctx.guild,
+          guildConfig: ctx.guildConfig,
+          servers: ctx.servers,
+          web: ctx.web ?? {},
+          client: ctx.client ?? null,
+          pollSeconds: ctx.pollSeconds ?? null,
+          prefix: ctx.prefix ?? '!',
+          prefixEnabled: ctx.prefixEnabled !== false,
+          dms: ctx.dms ?? null,
+          stats: ctx.stats ?? null,
+        }),
+      );
+    },
+  },
 ];
 
 export function commandByName(name) {

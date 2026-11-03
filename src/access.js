@@ -35,14 +35,17 @@ export function accessDecision(lock, guildId) {
 
 /** A refusal that tells the truth and looks like it belongs to the brand. */
 export function lockedEmbed({ lock = null, guild = null, brand = 'Spinback' } = {}) {
-  const mine = lock && lock.mode === 'explicit' ? 'the server it was set up for' : 'one Discord server only';
+  const scope =
+    lock && lock.mode === 'explicit'
+      ? 'only answers in the servers it was set up for'
+      : 'answers in one Discord server: the one whose setup has been saved';
 
   return baseEmbed({ color: COLORS.warning })
     .setTitle(EMOJI.lock + ' This bot belongs to one server')
     .setDescription(
-      (guild ? '**' + guild.name + '** is not the server this bot looks after.\n\n' : '') +
-        '**' + brand + ' pop bot** is set up for ' + mine + '. It will not answer here, and nothing from' +
-        ' this server is stored or forwarded anywhere.',
+      (guild ? '**' + guild.name + '** is not the server this bot looks after.' : 'This is not the server this bot looks after.') +
+        '\n\n**' + brand + ' pop bot** ' + scope + '. It will not answer here, and nothing from this' +
+        ' server is stored or forwarded anywhere.',
     )
     .addFields(
       {

@@ -18,7 +18,7 @@ test('lockFrom prefers the explicit list, then the servers that claimed the bot'
   assert.equal(lockFrom({ allowed: ['  ', ''] }).mode, 'open', 'blank entries are not a claim');
 
   assert.equal(lockFrom({ claimed: ['1553825462315257868'] }).mode, 'claimed');
-  assert.deepEqual([...lockFrom({ claimed: [1553825462315257868] }).ids], ['1553825462315257868']);
+  assert.deepEqual([...lockFrom({ claimed: [1234] }).ids], ['1234'], 'a numeric id is stored as its string');
 
   const both = lockFrom({ allowed: ['1'], claimed: ['9'] });
   assert.equal(both.mode, 'explicit', 'the environment wins over what the data directory says');
@@ -35,7 +35,7 @@ test('accessDecision lets one server in and tells the others why not', () => {
 
   assert.equal(accessDecision(claimed, null).allowed, false, 'no guild id is not a pass');
   assert.equal(accessDecision(claimed, undefined).allowed, false);
-  assert.equal(accessDecision(claimed, 1553825462315257868).allowed, true, 'a number id still matches');
+  assert.equal(accessDecision(lockFrom({ claimed: ['1234'] }), 1234).allowed, true, 'a number id still matches');
 
   assert.equal(accessDecision(lockFrom(), 'anything').allowed, true, 'an unclaimed bot is open');
   assert.match(accessDecision(lockFrom({ allowed: ['1'] }), '2').reason, /another server/);
@@ -51,8 +51,12 @@ test('the refusal is branded, honest and free of secrets', () => {
   assert.match(data.fields.at(-1).value, /configuration/);
   assert.ok(!JSON.stringify(data).includes('1553825462315257868'), 'no other server id leaks into the refusal');
 
+  const claimed = lockedEmbed({ lock: lockFrom({ claimed: ['1'] }), guild: { id: '2', name: 'Someone Else' } });
+  assert.match(claimed.data.description, /the one whose setup has been saved/);
+
   const anonymous = lockedEmbed({ lock: lockFrom({ allowed: ['1'] }) });
-  assert.match(anonymous.data.description, /another server/);
+  assert.match(anonymous.data.description, /This is not the server this bot looks after/);
+  assert.match(anonymous.data.description, /only answers in the servers it was set up for/);
 });
 
 test('the gate follows the data directory, so the first /setup claims the bot', async () => {
