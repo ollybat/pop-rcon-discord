@@ -9,6 +9,7 @@ import {
   errorLogEmbed,
   guideEmbed,
   joinLeaveEmbed,
+  outageEmbed,
   panelEmbed,
   peakLine,
   pingEmbed,
@@ -403,3 +404,81 @@ test('welcomeEmbed tells a new server owner what to do first', () => {
   assert.match(embed.data.description, /!pop/);
 });
 
+
+test('the outage message explains itself without ever naming the address', () => {
+  const down = outageEmbed({ down: true, name: 'spinback 5x', seconds: 640, error: 'ETIMEDOUT', alertMinutes: 5 });
+  assert.match(down.data.title, /spinback 5x has not answered for 10m/);
+  assert.match(down.data.description, /no answer for 10m/);
+  assert.match(down.data.description, /ETIMEDOUT/);
+  assert.match(down.data.description, /\+rcon\.web 1/);
+  assert.match(down.data.description, /\/setup/);
+  assert.ok(!JSON.stringify(down.data).includes('hunter2'), 'never a password');
+  assert.ok(!/149\.102|:\d{4,5}\b/.test(down.data.description), 'and never an address or port');
+
+  const back = outageEmbed({ down: false, name: 'spinback 5x', seconds: 640 });
+  assert.match(back.data.title, /answering again/);
+  assert.match(back.data.description, /unreachable for 10m/);
+
+  const quiet = outageEmbed({});
+  assert.match(quiet.data.title, /has not answered for 0s/);
+});
+
+test('popServerEmbed mentions a fresh restart and stops mentioning an old one', () => {
+  const base = { slot: 1, name: 'S', connected: true, players: [], latencyMs: 12, at: null };
+  const info = { players: 0, max: 100, queued: 0, joining: 0, uptime: 60, restarting: false, hostname: 'S' };
+
+  const fresh = popServerEmbed({ ...base, info, restart: { at: new Date().toISOString(), wasUpSeconds: 82000, wiped: false } });
+  const field = fieldNamed(fresh, 'Restarted');
+  assert.ok(field, 'the restart is on the answer');
+  assert.match(field.value, /1d 22h/, 'and says how long it had been up');
+
+  const wiped = popServerEmbed({ ...base, info, restart: { at: new Date().toISOString(), wasUpSeconds: 82000, wiped: true, entityCount: 180 } });
+  assert.match(fieldNamed(wiped, 'Restarted').value, /looks like a fresh map/);
+
+  const old = popServerEmbed({ ...base, info, restart: { at: new Date(Date.now() - 3600 * 1000).toISOString(), wasUpSeconds: 82000 } });
+  assert.equal(fieldNamed(old, 'Restarted'), null, 'an hour later it is history');
+
+  assert.equal(fieldNamed(popServerEmbed({ ...base, info }), 'Restarted'), null, 'no restart, no field');
+});
+
+test('a struggling server says so on its own answer', () => {
+  const embed = popServerEmbed({
+    slot: 1,
+    name: 'S',
+    connected: true,
+    players: [],
+    latencyMs: 40,
+    at: null,
+    info: { players: 40, max: 100, queued: 0, joining: 0, uptime: 60, restarting: false, framerate: 9 },
+  });
+  assert.match(embed.data.description, /Working hard — 9 fps/);
+  assert.match(embed.data.description, /not the Discord bot/);
+  assert.equal(embed.data.footer.text, 'Powered by Spinback', 'and the brand stays put');
+
+  const fine = popServerEmbed({ slot: 1, name: 'S', connected: true, players: [], latencyMs: 40, at: null, info: { players: 4, max: 100, queued: 0, joining: 0, uptime: 60, restarting: false, framerate: 60 } });
+  assert.equal(fine.data.description ?? null, null, 'a healthy server needs no commentary');
+});
+
+test('pingEmbed leads with the worst server in the fleet', () => {
+  const healthy = pingEmbed({
+    gatewayMs: 20,
+    uptimeSeconds: 60,
+    snapshots: [{ slot: 1, name: 'S', connected: true, latencyMs: 10, at: null, info: { players: 4, max: 100, queued: 0, joining: 0, uptime: 60, restarting: false, framerate: 60 } }],
+  });
+  assert.match(healthy.data.description, /🟢 every server answers/);
+  assert.match(fieldNamed(healthy, 'RCON').value, /🟢/);
+
+  const mixed = pingEmbed({
+    gatewayMs: 20,
+    uptimeSeconds: 60,
+    snapshots: [
+      { slot: 1, name: 'S1', connected: true, latencyMs: 10, at: null, info: { players: 4, max: 100, queued: 0, joining: 0, uptime: 60, restarting: false, framerate: 5 } },
+      { slot: 2, name: 'S2', connected: false, latencyMs: null, at: null, error: 'ECONNREFUSED', info: null },
+    ],
+  });
+  assert.match(mixed.data.description, /1 of 2 not answering/);
+  const rcon = fieldNamed(mixed, 'RCON').value;
+  assert.match(rcon, /🟠/);
+  assert.match(rcon, /5 fps/);
+  assert.match(rcon, /📴/);
+});

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { capEvents, diffPlayers, effectiveServers, playerId, serverSignature, toPlayerList } from '../src/servers.js';
+import { detectRestart, capEvents, diffPlayers, effectiveServers, playerId, serverSignature, toPlayerList } from '../src/servers.js';
 
 test('toPlayerList normalises the JSON playerlist reply', () => {
   assert.deepEqual(toPlayerList(null), []);
@@ -121,4 +121,24 @@ test('a poll diffs the roster, not the internal map', async () => {
   await monitor.refresh();
   assert.deepEqual(events, [], 'a second poll of the same roster is silent');
   assert.deepEqual([...monitor.players.keys()], ['1']);
+});
+
+test('an uptime that goes backwards is a restart, and a tiny save is a hint of a wipe', () => {
+  const at = new Date('2026-11-03T10:00:00.000Z');
+  assert.equal(detectRestart(null, { uptime: 100 }), null, 'no previous reading, no claim');
+  assert.equal(detectRestart({ uptime: 600 }, { uptime: 700 }), null, 'still climbing');
+  assert.equal(detectRestart({ uptime: 600 }, { uptime: 600 }), null);
+  assert.equal(detectRestart({ uptime: 30 }, { uptime: 5 }), null, 'a server that just started is not a restart');
+
+  const restart = detectRestart({ uptime: 82000, entityCount: 24000 }, { uptime: 12, entityCount: 21000 }, at);
+  assert.equal(restart.at, at.toISOString());
+  assert.equal(restart.wasUpSeconds, 82000);
+  assert.equal(restart.wiped, false);
+
+  const wipe = detectRestart({ uptime: 82000, entityCount: 24000 }, { uptime: 12, entityCount: 180 }, at);
+  assert.equal(wipe.wiped, true);
+  assert.equal(wipe.entityCount, 180);
+
+  const unknown = detectRestart({ uptime: 900 }, { uptime: 4 }, at);
+  assert.equal(unknown.wiped, false, 'no entity counts, no claim either way');
 });

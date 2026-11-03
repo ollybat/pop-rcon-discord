@@ -252,3 +252,19 @@ test('milestones can be turned off and survive a reload', () => {
   assert.equal(normalizeGuildConfig({}, 'g').alerts.enabled, true);
   assert.equal(normalizeGuildConfig({ alerts: 'nonsense' }, 'g').alerts.enabled, true);
 });
+
+test('milestones and outages can be switched off separately', () => {
+  const empty = emptyGuildConfig('g');
+  assert.deepEqual(empty.alerts, { enabled: true, milestones: true, outage: true }, 'both start on');
+
+  const off = normalizeGuildConfig({ alerts: { milestones: false } }, 'g');
+  assert.equal(off.alerts.milestones, false);
+  assert.equal(off.alerts.outage, true, 'one switch does not move the other');
+
+  const both = normalizeGuildConfig({ alerts: { outage: false } }, 'g');
+  assert.equal(both.alerts.outage, false);
+  assert.equal(both.alerts.milestones, true);
+
+  const master = normalizeGuildConfig({ alerts: { enabled: false, milestones: true } }, 'g');
+  assert.equal(master.alerts.enabled, false, 'the master switch survives');
+});
