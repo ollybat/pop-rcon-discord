@@ -131,6 +131,8 @@ export class ServerMonitor {
 
     this.players = new Map();
     this.firstSeen = new Map();
+    // One console line per fault episode, not one per poll: the channel post carries the count.
+    this.failures = new Map();
     this.seeded = false;
     this.timer = null;
     this.polling = null;
@@ -199,10 +201,31 @@ export class ServerMonitor {
 
   report(error, source) {
     const message = error && error.message ? error.message : String(error);
-    this.logger.warn('[server ' + this.slot + '] ' + source + ' failed: ' + message);
+    const episode = this.failures.get(source) ?? { count: 0, since: Date.now(), notified: false };
+    episode.count += 1;
+    this.failures.set(source, episode);
+
+    // First failure of an episode says what it is; the rest are counted, not repeated.
+    if (!episode.notified) {
+      episode.notified = true;
+      this.logger.warn('[server ' + this.slot + '] ' + source + ' failed: ' + message);
+    } else {
+      this.logger.debug?.('[server ' + this.slot + '] ' + source + ' failed again x' + episode.count + ': ' + message);
+    }
+
     stats.inc('rconErrors');
     stats.note(source + ' error on ' + this.server.name + ': ' + message);
     this.onError?.({ server: this.server, source, message });
+  }
+
+  /** A good poll ends every fault episode, so the next one is reported from scratch. */
+  clearFailures() {
+    for (const [source, episode] of this.failures) {
+      if (!episode.notified) continue;
+      const seconds = Math.max(1, Math.round((Date.now() - episode.since) / 1000));
+      this.logger.info('[server ' + this.slot + '] ' + source + ' recovered after ' + episode.count + ' failure(s) in ' + seconds + 's');
+    }
+    this.failures.clear();
   }
 
   /** One poll: serverinfo + playerlist, then diff the roster. */
@@ -273,6 +296,7 @@ export class ServerMonitor {
       history.push(key, info);
       history.observeRoster(key, players);
       stats.inc('polls');
+      this.clearFailures();
 
       // A restart shows up as an uptime that went backwards. The newest restart is kept on the
       // snapshot so /pop can say "restarted 4 minutes ago" until it stops being news.

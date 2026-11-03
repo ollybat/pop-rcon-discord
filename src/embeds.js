@@ -529,7 +529,7 @@ export function commandLogEmbed({ user, tier, command, options = [], ok = true, 
   return embed;
 }
 
-export function errorLogEmbed({ source, message, context = null, stack = null }) {
+export function errorLogEmbed({ source, message, context = null, stack = null, repeat = null }) {
   const safe = { source: scrubSecrets(source), message: scrubSecrets(message), context: scrubSecrets(context), stack: scrubSecrets(stack) };
   ({ source, message, context, stack } = safe);
   const embed = baseEmbed({ color: COLORS.danger })
@@ -540,6 +540,15 @@ export function errorLogEmbed({ source, message, context = null, stack = null })
   if (source && source !== 'unknown') embed.addFields({ name: 'Source', value: truncate(String(source), 200), inline: false });
   if (context) embed.addFields({ name: 'Where', value: truncate(context, 500), inline: false });
   if (stack) embed.addFields({ name: 'Trace', value: truncate(stack, 900), inline: false });
+
+  // A fault that keeps happening stays one message, with the tally on it.
+  if (repeat && repeat.count > 1) {
+    const stamp = (value) => Math.floor(new Date(value).getTime() / 1000);
+    const lines = ['🔁 **' + repeat.count + 'x** · first <t:' + stamp(repeat.firstAt) + ':R> · last <t:' + stamp(repeat.lastAt) + ':R>'];
+    if (repeat.quiet) lines.push('✅ Quiet again since <t:' + stamp(repeat.lastAt) + ':R> — no new occurrence.');
+    embed.addFields({ name: 'Repeats', value: truncate(lines.join('\n'), 300), inline: false });
+  }
+
   return embed;
 }
 

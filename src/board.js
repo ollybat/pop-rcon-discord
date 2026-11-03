@@ -94,7 +94,16 @@ export function createBoardManager({
     const message = await channel.messages.fetch(messageId).catch(() => null);
     if (!message) return { ok: false, gone: true, reason: 'message gone' };
 
-    const edited = await message.edit(payloadFor(guildId, { focus, showPlayers, details, note })).then(() => true).catch(() => false);
+    const edited = await message
+      .edit(payloadFor(guildId, { focus, showPlayers, details, note }))
+      .then(() => true)
+      .catch((error) => {
+        // 10008 Unknown Message / 10003 Unknown Channel: somebody deleted it. That is not a
+        // failure worth shouting about - it is the signal to post a fresh one.
+        if (error?.code === 10008 || error?.code === 10003) return 'gone';
+        return false;
+      });
+    if (edited === 'gone') return { ok: false, gone: true, reason: 'message gone' };
     return edited ? { ok: true, gone: false, reason: null } : { ok: false, gone: false, reason: 'could not edit' };
   }
 
