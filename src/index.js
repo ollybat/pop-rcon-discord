@@ -196,14 +196,22 @@ const presence = new PresenceManager({
     enabled: config.presence.enabled,
     intervalSeconds: config.poll.intervalSeconds,
     restingOnReconnect: config.presence.restingOnReconnect,
-    // While the server is online the line cycles: population, then queue/uptime, then the day's peak.
-    rotateFrames: config.presence.rotate
-      ? [config.presence.formats.online, '⏳ {queued} queued · 🕒 {uptime}', '🥇 {peak} peak today · 🕒 {uptime}']
-      : null,
+    // Which slot the line follows, so /setup can say so out loud.
+    slot: config.presence.serverSlot === 'all' ? null : Number(config.presence.serverSlot),
+    // The whole vocabulary of the bio: four lines, no rotation.
     formats: {
       online: config.presence.formats.online,
       offline: config.presence.formats.offline,
       resting: config.presence.formats.resting,
+      problem: config.presence.formats.problem,
+    },
+    // /setup -> 🟢 Status line switches the ⚠️ PROBLEM state per Discord server. Read on every
+    // poll, so the switch applies within seconds instead of needing a restart.
+    problem: () => {
+      const guildId = presenceGuildId();
+      const guildConfig = guildId ? store.get(guildId) : null;
+      if (!guildConfig) return config.presence.problem;
+      return guildConfig.presence ? guildConfig.presence.problem !== false : config.presence.problem;
     },
   },
   provider: presenceProvider,
@@ -603,6 +611,7 @@ client.on('interactionCreate', async (interaction) => {
     board,
     watch,
     digest: digestRunner,
+    presence,
     stats,
   };
 

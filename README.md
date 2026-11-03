@@ -5,11 +5,14 @@ server console over **WebRCON**, shows the live population in its own status lin
 server owner a **/setup** wizard plus one headline command for everybody: **!pop**.
 
 ```
-🟢 RCON┆👥  63/200 ⏳0/2      <- the bot's "Watching" activity, updated every 20 seconds
+🟢 RCON ┆👥 63/200┆⏳Q: 0      <- the bot's "Watching" activity, updated every 20 seconds
 ```
 
-- **Live status line** - 🟢 online with players/max and queue, 🔴 offline, 🟡 resting (the server is
-  restarting). Up to three servers can be added together.
+- **A status line that says exactly one thing** - the bot's own bio is four lines and never rotates:
+  `🟢 RCON ┆👥 63/200┆⏳Q: 0`, `🛑 RCON ┆ OFFLINE`, `⏳ RCON ┆ RESTING` (the server is restarting) and
+  `⚠️ RCON ┆ PROBLEM` (reachable but unhealthy: silent `serverinfo`, under 20 FPS, or a slow RCON
+  round-trip). The ⚠️ state is switched per server in **/setup → 🟢 Status line**, which also
+  previews the line the bot is wearing right now. Up to three servers can be added together.
 - **/setup wizard** - buttons and dropdowns, no JSON and no config files to hand edit: five staff
   roles, four log channels and up to three servers. Or press **⚡ Quick setup** and it guesses your
   existing roles by name and creates the four log channels for you.
@@ -110,8 +113,9 @@ Then run **/setup** in your server - see [docs/SETUP.md](docs/SETUP.md) for the 
 
 ## The /setup wizard
 
-`/setup` opens a private panel with a summary and five buttons: **Roles**, **Logs**, **Servers**,
-**Refresh** and **Done**.
+`/setup` opens a private panel with a summary and three rows of buttons: **Roles**, **Logs**,
+**Servers**, **Refresh** and **Done** on the first, the one-press helpers and the guide on the
+second, and the tests plus **🟢 Status line** and **📌 Live board** on the third.
 
 | Button | What it does |
 | --- | --- |
@@ -122,6 +126,9 @@ Then run **/setup** in your server - see [docs/SETUP.md](docs/SETUP.md) for the 
 | 🪄 Guess roles | Matches Owner / Co-Owner / Head Admin / Admin / Mod roles you already have |
 | 📁 Make channels | Creates \`🎧 Spinback\` with 🚪・joins-leaves, ⌨️・staff-commands, 🚨・bot-errors, 📡・server-status |
 | 📖 Guide | The one-page "how do I turn RCON on" walkthrough with the exact start line |
+| 🟢 Status line | The bot's bio: the four lines it can wear, the one it is wearing right now, and the ⚠️ PROBLEM switch |
+| 📌 Live board | The self-updating population board, the daily digest and the alert switches |
+| 🧪 Test channels | Posts one sample of every log embed so you can check the channels before the clan sees them |
 | 🔄 Refresh | Reconnects and re-reads every server |
 | ✅ Done | Checklist of what is configured and what is still missing |
 | 🧹 Reset | Wipes every saved role, channel and server for this Discord server |
@@ -324,7 +331,6 @@ advanced shortcut that pre-fills server slot 1 before the first `/setup`.
 | `BOARD_INTERVAL_SECONDS` | `30` | How often the live board and live `/pop` answers refresh. Floor is 15. |
 | `BOARD_FORCE_SECONDS` | `300` | Refresh anyway after this long, so "last reading" never goes stale. |
 | `BOARD_LIVE_MINUTES` | `20` | How long 🔴 Keep live keeps a message updating. |
-| `PRESENCE_ROTATE` | `true` | Rotate the activity line through population, queue and peak while online. |
 | `ALERT_DOWN_AFTER_MINUTES` | `5` | How long a server must be unreachable before anyone is told. |
 | `ALERT_DM_OWNER` | `true` | Also DM the guild owner about an outage and its recovery. |
 | `DIGEST_HOUR` | `20` | The UTC hour the daily digest goes out, unless a guild picked its own. |
@@ -335,10 +341,12 @@ advanced shortcut that pre-fills server slot 1 before the first `/setup`.
 | `PRESENCE_ENABLED` | `true` | Turn the activity line off entirely. |
 | `PRESENCE_GUILD_ID` | - | Which server's servers drive the activity line. |
 | `PRESENCE_SERVER_SLOT` | `1` | `1`, `2`, `3`, or `all` to add every server together. |
-| `PRESENCE_RESTING_ON_RECONNECT` | `false` | Show 🟡 while the bot is reconnecting instead of 🔴. |
-| `PRESENCE_ONLINE_FORMAT` | `🟢 RCON┆👥  {players}/{max} ⏳{queued}/{joining}` | Online template. |
-| `PRESENCE_OFFLINE_FORMAT` | `🔴 RCON┆OFFLINE` | Offline template. |
-| `PRESENCE_RESTING_FORMAT` | `🟡 RCON┆RESTING` | Restarting template. |
+| `PRESENCE_RESTING_ON_RECONNECT` | `false` | Show ⏳ while the bot is reconnecting instead of 🛑. |
+| `PRESENCE_ONLINE_FORMAT` | `🟢 RCON ┆👥 {players}/{max}┆⏳Q: {queued}` | Online template. |
+| `PRESENCE_OFFLINE_FORMAT` | `🛑 RCON ┆ OFFLINE` | Offline template. |
+| `PRESENCE_RESTING_FORMAT` | `⏳ RCON ┆ RESTING` | Restarting template. |
+| `PRESENCE_PROBLEM_FORMAT` | `⚠️ RCON ┆ PROBLEM` | Reachable-but-unhealthy template. |
+| `PRESENCE_PROBLEM` | `true` | Fallback for the ⚠️ state; each server switches it in `/setup` → 🟢 **Status line**. |
 
 Placeholders: `{players}` `{max}` `{maxPlayers}` `{queued}` `{joining}` `{uptime}` `{servers}`.
 Discord renders an activity name on one line and cuts it at 128 characters, so keep templates short.
