@@ -166,6 +166,19 @@ export async function handlePopComponent(interaction, ctx) {
 
   const config = ctx.store.get(guild.id);
 
+  /**
+   * If this answer is already live, it must remember what the last button asked for, or the next
+   * refresh would undo the reader's choice a few seconds later.
+   */
+  function keepLiveInSync() {
+    const entry = ctx.board?.liveEntry?.({ channelId: interaction.channelId, messageId: interaction.message?.id });
+    if (!entry) return null;
+    entry.focus = parsed.slot;
+    entry.showPlayers = parsed.players;
+    entry.details = parsed.details;
+    return entry;
+  }
+
   if (parsed.action === 'live') {
     if (!ctx.board) {
       await interaction.reply({ content: 'Live updates are not available on this bot right now.', flags: MessageFlags.Ephemeral });
@@ -207,6 +220,7 @@ export async function handlePopComponent(interaction, ctx) {
 
   if (parsed.action === 'refresh') {
     await interaction.deferUpdate();
+    keepLiveInSync();
     const snapshots = await ctx.servers.refreshGuild(guild.id);
     await interaction.editReply(
       popPayload({
@@ -221,6 +235,8 @@ export async function handlePopComponent(interaction, ctx) {
     );
     return true;
   }
+
+  keepLiveInSync();
 
   await interaction.update(
     popPayload({

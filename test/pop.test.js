@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { POP_ID, parsePopId, popPayload, popPlaceholder, popRows } from '../src/pop.js';
+import { POP_ID, handlePopComponent, parsePopId, popPayload, popPlaceholder, popRows } from '../src/pop.js';
 import { emptyGuildConfig } from '../src/store.js';
 
 function snapshot(slot, players = 0, connected = true) {
@@ -124,4 +124,41 @@ test('a note lands on the first embed, where it is read', () => {
   const many = popPayload({ snapshots: [snapshot(1, 3), snapshot(2, 4)], config: emptyGuildConfig('g'), note: '-# live now' });
   assert.match(many.embeds[0].data.description, /-# live now/, 'the summary carries it');
   assert.equal(/live now/.test(many.embeds[1].data.description ?? ''), false, 'the server embeds do not repeat it');
+});
+test('a live answer remembers what the last button asked for', async () => {
+  const entry = { focus: 1, showPlayers: true, details: true };
+  const interaction = {
+    customId: 'sb:pop:toggle:all:0:1',
+    guild: { id: 'g' },
+    channelId: '111111111111111111',
+    message: { id: '222222222222222222' },
+    update: async () => {},
+  };
+  const ctx = {
+    store: { get: () => emptyGuildConfig('g') },
+    servers: { snapshots: () => [snapshot(1, 3)] },
+    board: { liveEntry: () => entry },
+    pollSeconds: 20,
+  };
+
+  assert.equal(await handlePopComponent(interaction, ctx), true);
+  assert.equal(entry.showPlayers, false, 'the next refresh keeps the hidden-player view');
+  assert.equal(entry.focus, null, 'and the wider view');
+});
+
+test('a normal answer is untouched by the live bookkeeping', async () => {
+  const interaction = {
+    customId: 'sb:pop:details:1:1:0',
+    guild: { id: 'g' },
+    channelId: '111111111111111111',
+    message: { id: '222222222222222222' },
+    update: async () => {},
+  };
+  const ctx = {
+    store: { get: () => emptyGuildConfig('g') },
+    servers: { snapshots: () => [snapshot(1, 3)] },
+    board: { liveEntry: () => null },
+  };
+
+  assert.equal(await handlePopComponent(interaction, ctx), true);
 });
