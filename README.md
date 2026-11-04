@@ -46,9 +46,11 @@ server owner a **/setup** wizard plus one headline command for everybody: **!pop
 ## Branding
 
 Every embed the bot sends ends with **Powered by Spinback** and (once `PUBLIC_URL` is set) carries
-the Spinback mark as its thumbnail, served from the bot itself at `GET /logo.png`. The logo lives in
-the repository as base64 text (`assets/spinback-logo.b64`) so nothing but text is ever committed,
-and it is decoded into memory on the first request.
+the Spinback mark at the bottom of the card - a small **80x80 animated GIF** (21 frames, 2.5 s loop,
+47 KB) served from the bot itself at `GET /mark.gif`, so it signs the embed off instead of sitting in
+the corner. Both assets live in the repository as base64 text (`assets/spinback-mark.b64` and
+`assets/spinback-logo.b64`) so nothing but text is ever committed, and they are decoded into memory
+on the first request. The still logo is still served at `GET /logo.png` (and `/favicon.ico`).
 
 ## Privacy
 

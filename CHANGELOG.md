@@ -4,6 +4,20 @@ All notable changes to this project are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1] — the mark moves to the bottom, and gets small
+
+### Changed
+- **Every embed wears the Spinback mark at the bottom now, instead of as a thumbnail in the corner.**
+  It is the animated version of the logo, cut down to **80x80** (21 frames, 2.5 s loop, 47 KB) and
+  served by the bot itself at `GET /mark.gif`, so a card ends with a small moving signature rather
+  than a still logo tucked beside the title. `BRAND_MARK` in `src/theme.js` follows the rule
+  `BRAND_LOGO` already had: no `PUBLIC_URL`, no image. `baseEmbed({ logo: false })` still opts out.
+- The still logo is unchanged and still served at `GET /logo.png`.
+
+### Added
+- **`assets/spinback-mark.b64`** - the bundled animation, kept as base64 text like the logo so the
+  repository stays text-only. `/health` reports the address it is serving as `mark`.
+
 ## [0.15.0] — a bio that says one thing, and a ⚠️ PROBLEM state
 
 ### Changed
