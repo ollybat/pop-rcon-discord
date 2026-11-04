@@ -5,7 +5,7 @@ export const BRAND = {
   serverDefault: 'Spinback 5X EU',
   clan: 'Spinback clan',
   footer: 'Powered by Spinback',
-  version: '0.15.0',
+  version: '0.15.1',
 };
 
 /** Light blue is the brand colour; the rest stay semantic so status is still readable. */
@@ -189,4 +189,14 @@ export function footerText() {
 export const BRAND_LOGO = (() => {
   const url = String(process.env.PUBLIC_URL ?? '').trim().replace(/\/+$/, '');
   return url ? url + '/logo.png' : null;
+})();
+
+/**
+ * The animated mark every embed wears at the bottom - the same art as the logo, but moving and
+ * deliberately small (80x80, 2.5 s loop). Same rule as BRAND_LOGO: no PUBLIC_URL, no image, because
+ * there is no address Discord could fetch it from.
+ */
+export const BRAND_MARK = (() => {
+  const url = String(process.env.PUBLIC_URL ?? '').trim().replace(/\/+$/, '');
+  return url ? url + '/mark.gif' : null;
 })();

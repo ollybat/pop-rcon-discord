@@ -3,12 +3,13 @@ import { fleetVerdict, recentRestart, serverVerdict } from './health.js';
 import { outageText } from './watch.js';
 import { bar, clock, duration, maskPassword, percent, plural, relative, scrubSecrets, shortTime, sparkline, trendArrow, truncate } from './format.js';
 import { history, slotKey } from './history.js';
-import { BRAND, BRAND_LOGO, COLORS, EMOJI, LOG_KINDS, STATUS, TIERS, footerText, tierById } from './theme.js';
+import { BRAND, BRAND_MARK, COLORS, EMOJI, LOG_KINDS, STATUS, TIERS, footerText, tierById } from './theme.js';
 import { MAX_SERVERS, bestFor, describeConfig, peakFor } from './store.js';
 
 export function baseEmbed({ color = COLORS.brand, logo = true } = {}) {
   const embed = new EmbedBuilder().setColor(color).setFooter({ text: footerText() });
-  if (logo && BRAND_LOGO) embed.setThumbnail(BRAND_LOGO);
+  // Small at the bottom, not a thumbnail in the corner: the animated mark signs off every embed.
+  if (logo && BRAND_MARK) embed.setImage(BRAND_MARK);
   return embed;
 }
 

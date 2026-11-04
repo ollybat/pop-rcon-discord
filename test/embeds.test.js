@@ -55,7 +55,8 @@ test('every embed wears the same brand footer', () => {
     assert.equal(other.data.footer.text, 'Powered by Spinback', 'the footer is the brand line and nothing else');
   }
 
-  assert.equal(baseEmbed({ logo: false }).data.thumbnail, undefined, 'the mark is opt-out');
+  assert.equal(baseEmbed().data.thumbnail, undefined, 'the mark is no longer a corner thumbnail');
+  assert.equal(baseEmbed({ logo: false }).data.image, undefined, 'the mark is opt-out');
 });
 
 test('the setup panel summarises roles, logs, servers and readiness', () => {
